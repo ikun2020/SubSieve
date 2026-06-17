@@ -414,7 +414,7 @@ tr:hover td{background:rgba(99,102,241,.04)}
       <div class="card">
         <div class="card-title">添加白名单 IP</div>
         <div class="ip-form">
-          <input class="ip-input" id="wl-ip" placeholder="支持批量，逗号分隔：1.1.1.1,2.2.2.0/24">
+          <input class="ip-input" id="wl-ip" placeholder="支持批量，逗号分隔：IPv4 / IPv6 / CIDR">
           <input class="comment-input" id="wl-comment" placeholder="备注（可选）">
           <button class="btn-primary" onclick="wlAdd()">添加</button>
         </div>
@@ -433,7 +433,7 @@ tr:hover td{background:rgba(99,102,241,.04)}
       <div class="card">
         <div class="card-title">添加黑名单 IP</div>
         <div class="ip-form">
-          <input class="ip-input" id="bl-ip" placeholder="1.2.3.4 或 1.2.3.0/24">
+          <input class="ip-input" id="bl-ip" placeholder="IPv4 / IPv6 / CIDR">
           <input class="comment-input" id="bl-comment" placeholder="备注（可选）">
           <button class="btn-primary" onclick="blAdd()">添加并立即生效</button>
           <button class="mode-btn import-btn" onclick="exportBlacklist()">导出</button>
@@ -1631,8 +1631,8 @@ async function importBlacklist(input) {
     const t = line.trim();
     if (!t || t.startsWith('#')) continue;
     // 跳过 nginx deny 语法行
-    const m = t.match(/^(?:deny\s+)?(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d+)?)/);
-    if (m) ips.push(m[1]);
+    const ip = t.replace(/^deny\s+/i, '').split(/[;\s#]/)[0].trim();
+    if (ip) ips.push(ip);
   }
   if (!ips.length) { toast('文件中未找到有效IP/CIDR', 'err'); return; }
   const d = await apiFetch('/api/blacklist.php', {

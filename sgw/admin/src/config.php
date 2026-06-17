@@ -181,6 +181,84 @@ function token_from_request(string $request): string {
     return '';
 }
 
+function normalize_ip_cidr(string $value): ?string {
+    $value = trim($value);
+    if ($value === '' || preg_match('/[\s#;{}]/', $value)) {
+        return null;
+    }
+
+    $parts = explode('/', $value);
+    if (count($parts) > 2 || $parts[0] === '') {
+        return null;
+    }
+
+    $ip = $parts[0];
+    $isV4 = filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false;
+    $isV6 = filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false;
+    if (!$isV4 && !$isV6) {
+        return null;
+    }
+
+    $ip = $isV6 ? strtolower($ip) : $ip;
+    if (count($parts) === 1) {
+        return $ip;
+    }
+
+    if (!preg_match('/^\d{1,3}$/', $parts[1])) {
+        return null;
+    }
+    $prefix = (int)$parts[1];
+    $maxPrefix = $isV4 ? 32 : 128;
+    if ($prefix < 0 || $prefix > $maxPrefix) {
+        return null;
+    }
+
+    return $ip . '/' . $prefix;
+}
+
+function ip_matches_cidr(string $ip, string $cidr): bool {
+    $ip = normalize_ip_cidr($ip);
+    $cidr = normalize_ip_cidr($cidr);
+    if ($ip === null || $cidr === null || str_contains($ip, '/')) {
+        return false;
+    }
+
+    $cidrParts = explode('/', $cidr, 2);
+    $base = $cidrParts[0];
+    $ipBin = inet_pton($ip);
+    $baseBin = inet_pton($base);
+    if ($ipBin === false || $baseBin === false || strlen($ipBin) !== strlen($baseBin)) {
+        return false;
+    }
+
+    if (count($cidrParts) === 1) {
+        return hash_equals($baseBin, $ipBin);
+    }
+
+    $prefix = (int)$cidrParts[1];
+    $fullBytes = intdiv($prefix, 8);
+    $remainingBits = $prefix % 8;
+
+    if ($fullBytes > 0 && substr($ipBin, 0, $fullBytes) !== substr($baseBin, 0, $fullBytes)) {
+        return false;
+    }
+    if ($remainingBits === 0) {
+        return true;
+    }
+
+    $mask = (0xFF << (8 - $remainingBits)) & 0xFF;
+    return (ord($ipBin[$fullBytes]) & $mask) === (ord($baseBin[$fullBytes]) & $mask);
+}
+
+function ip_in_cidr_list(string $ip, array $cidrs): bool {
+    foreach ($cidrs as $cidr) {
+        if (ip_matches_cidr($ip, (string)$cidr)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /**
  * 触发 gateway nginx reload
  * 向共享 volume 写入信号文件，gateway 的 watcher 检测后执行 nginx -s reload

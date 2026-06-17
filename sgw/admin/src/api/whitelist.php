@@ -3,137 +3,166 @@ require_once __DIR__ . '/_auth.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-// GET — 列出白名单
 if ($method === 'GET') {
     json_out(['ok' => true, 'entries' => read_whitelist()]);
 }
 
-// POST — 添加条目（单个或批量导入）
 if ($method === 'POST') {
     $body = json_decode(file_get_contents('php://input'), true) ?? [];
 
-    // 批量导入（来自文件导入）
     if (!empty($body['import_ips']) && is_array($body['import_ips'])) {
         $entries = read_whitelist();
         $existingSet = [];
-        foreach ($entries as $e) $existingSet[$e['ip']] = true;
-        $newLines = []; $added = 0; $skipped = 0; $invalid = 0;
+        foreach ($entries as $entry) {
+            $existingSet[$entry['ip']] = true;
+        }
+
+        $added = 0;
+        $skipped = 0;
+        $invalid = 0;
         foreach ($body['import_ips'] as $rawIp) {
-            $ip = trim($rawIp);
-            if (!$ip) continue;
-            if (!preg_match('/^[\d\.\/\:a-fA-F]+$/', $ip)) { $invalid++; continue; }
-            if (isset($existingSet[$ip])) { $skipped++; continue; }
-            $newLines[] = $ip . '  # 从文件导入';
+            $ip = normalize_ip_cidr((string)$rawIp);
+            if ($ip === null) {
+                $invalid++;
+                continue;
+            }
+            if (isset($existingSet[$ip])) {
+                $skipped++;
+                continue;
+            }
+            $entries[] = ['ip' => $ip, 'comment' => '从文件导入'];
             $existingSet[$ip] = true;
             $added++;
         }
+
         if ($added > 0) {
-            file_put_contents(WHITELIST_IPS, implode("\n", $newLines) . "\n", FILE_APPEND | LOCK_EX);
+            if (!write_whitelist($entries)) {
+                json_err('写入白名单文件失败，请检查文件权限');
+            }
             whitelist_reload();
         }
+
         json_out(['ok' => true, 'added' => $added, 'skipped' => $skipped, 'invalid' => $invalid]);
     }
 
-    // 单个添加
-    $ip      = trim($body['ip'] ?? '');
-    $comment = safe_comment($body['comment'] ?? '');
-
-    if (!$ip || !preg_match('/^[\d\.\/\:a-fA-F]+$/', $ip)) {
-        json_err('IP 格式不合法');
+    $ip = normalize_ip_cidr((string)($body['ip'] ?? ''));
+    $comment = safe_comment((string)($body['comment'] ?? ''));
+    if ($ip === null) {
+        json_err('IP 格式不合法（支持 IPv4、IPv6、CIDR）');
     }
 
     $entries = read_whitelist();
-    foreach ($entries as $e) {
-        if ($e['ip'] === $ip) json_err('该IP已在白名单中');
+    foreach ($entries as $entry) {
+        if ($entry['ip'] === $ip) {
+            json_err('该IP已在白名单中');
+        }
     }
 
-    $line = $ip . ($comment ? "  # $comment" : '');
-    file_put_contents(WHITELIST_IPS, $line . "\n", FILE_APPEND | LOCK_EX);
+    $entries[] = ['ip' => $ip, 'comment' => $comment];
+    if (!write_whitelist($entries)) {
+        json_err('写入白名单文件失败，请检查文件权限');
+    }
     whitelist_reload();
-
-    json_out(['ok' => true]);
+    json_out(['ok' => true, 'ip' => $ip]);
 }
 
-// PATCH — 更新备注
 if ($method === 'PATCH') {
-    $body    = json_decode(file_get_contents('php://input'), true) ?? [];
-    $ip      = trim($body['ip'] ?? '');
-    $comment = safe_comment($body['comment'] ?? '');
-
-    if (!$ip) json_err('缺少 ip 参数');
-    if (!file_exists(WHITELIST_IPS)) json_err('白名单文件不存在');
-
-    $lines = file(WHITELIST_IPS, FILE_IGNORE_NEW_LINES);
-    $found = false;
-    $new   = [];
-    foreach ($lines as $line) {
-        $trimmed = trim($line);
-        if ($trimmed === '' || str_starts_with($trimmed, '#')) {
-            $new[] = $line;
-            continue;
-        }
-        if (preg_match('/^(\S+)/', $trimmed, $m) && $m[1] === $ip) {
-            $new[] = $ip . ($comment ? "  # $comment" : '');
-            $found = true;
-        } else {
-            $new[] = $line;
-        }
+    $body = json_decode(file_get_contents('php://input'), true) ?? [];
+    $ip = normalize_ip_cidr((string)($body['ip'] ?? ''));
+    $comment = safe_comment((string)($body['comment'] ?? ''));
+    if ($ip === null) {
+        json_err('IP 格式不合法（支持 IPv4、IPv6、CIDR）');
     }
 
-    if (!$found) json_err('未找到该IP');
-    file_put_contents(WHITELIST_IPS, implode("\n", $new) . "\n", LOCK_EX);
+    $entries = read_whitelist();
+    $found = false;
+    foreach ($entries as &$entry) {
+        if ($entry['ip'] === $ip) {
+            $entry['comment'] = $comment;
+            $found = true;
+            break;
+        }
+    }
+    unset($entry);
+
+    if (!$found) {
+        json_err('未找到该IP');
+    }
+    if (!write_whitelist($entries)) {
+        json_err('写入白名单文件失败，请检查文件权限');
+    }
     whitelist_reload();
     json_out(['ok' => true]);
 }
 
-// DELETE — 删除条目（支持单个 ip 或批量 ips 数组）
 if ($method === 'DELETE') {
     $body = json_decode(file_get_contents('php://input'), true) ?? [];
+    $rawIps = [];
 
-    $toRemove = [];
     if (!empty($body['ips']) && is_array($body['ips'])) {
-        $toRemove = array_map('trim', $body['ips']);
+        $rawIps = $body['ips'];
     } else {
-        $ip = trim($body['ip'] ?? '');
-        if (!$ip) json_err('缺少 ip 参数');
-        $toRemove = [$ip];
+        $rawIps = [$body['ip'] ?? ''];
     }
 
-    $lines = file_exists(WHITELIST_IPS)
-        ? file(WHITELIST_IPS, FILE_IGNORE_NEW_LINES)
-        : [];
+    $toRemove = [];
+    foreach ($rawIps as $rawIp) {
+        $ip = normalize_ip_cidr((string)$rawIp);
+        if ($ip !== null) {
+            $toRemove[$ip] = true;
+        }
+    }
+    if (!$toRemove) {
+        json_err('缺少有效的 ip 参数');
+    }
 
-    $new = array_filter($lines, function($l) use ($toRemove) {
-        $entry = strtok(trim($l), " \t");
-        return !in_array($entry, $toRemove);
-    });
-
-    file_put_contents(WHITELIST_IPS, implode("\n", $new) . "\n", LOCK_EX);
+    $entries = array_values(array_filter(read_whitelist(), fn($entry) => !isset($toRemove[$entry['ip']])));
+    if (!write_whitelist($entries)) {
+        json_err('写入白名单文件失败，请检查文件权限');
+    }
     whitelist_reload();
     json_out(['ok' => true]);
 }
 
 json_err('不支持的请求方式', 405);
 
-// ── 读取并解析白名单文件 ──────────────────────────────────────
 function read_whitelist(): array {
     if (!file_exists(WHITELIST_IPS)) return [];
 
     $entries = [];
+    $seen = [];
     foreach (file(WHITELIST_IPS, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
         $line = trim($line);
         if ($line === '' || str_starts_with($line, '#')) continue;
 
-        // 分离 IP 和注释
         $comment = '';
         if (preg_match('/^(\S+)\s+#\s*(.*)$/', $line, $m)) {
-            $ip      = $m[1];
+            $rawIp = $m[1];
             $comment = $m[2];
         } else {
-            $ip = strtok($line, " \t");
+            $rawIp = strtok($line, " \t");
         }
 
-        $entries[] = ['ip' => $ip, 'comment' => $comment];
+        $ip = normalize_ip_cidr((string)$rawIp);
+        if ($ip === null || isset($seen[$ip])) continue;
+        $seen[$ip] = true;
+        $entries[] = ['ip' => $ip, 'comment' => safe_comment($comment)];
     }
     return $entries;
+}
+
+function write_whitelist(array $entries): bool {
+    $lines = [];
+    $seen = [];
+    foreach ($entries as $entry) {
+        if (!is_array($entry)) continue;
+        $ip = normalize_ip_cidr((string)($entry['ip'] ?? ''));
+        if ($ip === null || isset($seen[$ip])) continue;
+        $seen[$ip] = true;
+
+        $comment = safe_comment((string)($entry['comment'] ?? ''));
+        $lines[] = $ip . ($comment !== '' ? "  # {$comment}" : '');
+    }
+
+    return file_put_contents(WHITELIST_IPS, implode("\n", $lines) . (count($lines) ? "\n" : ''), LOCK_EX) !== false;
 }

@@ -27,7 +27,8 @@ if (file_exists(WHITELIST_IPS)) {
         $wl = trim($wl);
         if ($wl === '' || str_starts_with($wl, '#')) continue;
         $ip = strtok($wl, " \t#");
-        if ($ip) $whitelistIps[$ip] = true;
+        $ip = normalize_ip_cidr((string)$ip);
+        if ($ip !== null) $whitelistIps[] = $ip;
     }
 }
 
@@ -71,7 +72,7 @@ if (file_exists(LOG_FILE)) {
             // ── 全量可疑分析（200 状态的订阅请求，排除白名单IP和Token黑名单）──
             $tok = token_from_request($request);
             if ($status === 200
-                && !isset($whitelistIps[$ip])
+                && !ip_in_cidr_list($ip, $whitelistIps)
                 && is_subscribe_request($request)
                 && $tok !== ''
             ) {

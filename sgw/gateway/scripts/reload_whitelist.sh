@@ -16,9 +16,10 @@ EOF
 if [[ -f "$WHITELIST_FILE" ]]; then
     while IFS= read -r line; do
         [[ -z "$line" || "$line" =~ ^# ]] && continue
-        # 提取 IP/CIDR 部分（去除行内注释和多余空白）
+        # Extract the IP/CIDR field and keep only characters valid for IPv4/IPv6/CIDR.
         ip=$(echo "$line" | awk '{print $1}')
         [[ -z "$ip" ]] && continue
+        echo "$ip" | grep -Eq '^[0-9A-Fa-f:.]+(/[0-9]{1,3})?$' || continue
         echo "    $ip 1;" >> "$OUTPUT"
     done < "$WHITELIST_FILE"
 fi
