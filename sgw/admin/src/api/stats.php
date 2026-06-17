@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__ . '/_auth.php';
 
-$today  = date('d/M/Y');
 $ips    = [];   // ip => [total,200,403,429,444]  (today only)
 $tokens = [];   // token => [count, last_time]     (today only)
 $badUas = [];   // ua => count (403 only, today)
@@ -46,7 +45,7 @@ if (file_exists(LOG_FILE)) {
             $status = (int)$status;
 
             // ── 今日统计 ──────────────────────────────────────────
-            if (str_contains($line, "[$today:")) {
+            if (log_line_is_today($line)) {
                 if (!isset($ips[$ip])) $ips[$ip] = ['total'=>0,'s200'=>0,'s403'=>0,'s429'=>0,'s444'=>0];
                 $ips[$ip]['total']++;
                 if ($status === 200) $ips[$ip]['s200']++;
@@ -54,8 +53,8 @@ if (file_exists(LOG_FILE)) {
                 elseif ($status === 429) $ips[$ip]['s429']++;
                 elseif ($status === 444) $ips[$ip]['s444']++;
 
-                if (preg_match('/[?&]token=([^&\s]+)/i', $request, $tm)) {
-                    $tok = $tm[1];
+                $tok = token_from_request($request);
+                if ($tok !== '') {
                     if (!isset($tokenBlacklist[$tok])) {
                         if (!isset($tokens[$tok])) $tokens[$tok] = ['count'=>0,'last_time'=>''];
                         $tokens[$tok]['count']++;
@@ -70,11 +69,12 @@ if (file_exists(LOG_FILE)) {
             }
 
             // ── 全量可疑分析（200 状态的订阅请求，排除白名单IP和Token黑名单）──
+            $tok = token_from_request($request);
             if ($status === 200
                 && !isset($whitelistIps[$ip])
-                && preg_match('/[?&]token=([^&\s]+)/i', $request, $tm)
+                && is_subscribe_request($request)
+                && $tok !== ''
             ) {
-                $tok = $tm[1];
                 if (!isset($tokenBlacklist[$tok])) {
                     $suspTokenIps[$tok][$ip] = true;
                     $suspIpTokens[$ip][$tok]  = true;

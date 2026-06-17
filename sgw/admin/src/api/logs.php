@@ -148,7 +148,7 @@ if ($method === 'DELETE') {
 
 // ── GET — 返回日志列表 ──────────────────────────────────────
 $mode    = $_GET['mode'] ?? 'today';
-$today   = date('d/M/Y');
+$today   = app_today_label();
 $maxRows = 3000;
 $logs    = [];
 
@@ -159,7 +159,7 @@ if (file_exists(LOG_FILE)) {
         while (($line = fgets($handle)) !== false) {
             $line = rtrim($line);
             if ($line === '') continue;
-            if ($mode === 'today' && !str_contains($line, "[$today:")) continue;
+            if ($mode === 'today' && !log_line_is_today($line)) continue;
             $buffer[] = $line;
             if (count($buffer) > $maxRows) array_shift($buffer);
         }
@@ -182,10 +182,7 @@ function parse_line(string $line): ?array {
 
     [, $ip, $time, $request, $status, $bytes, $ua] = $m;
 
-    $token = '';
-    if (preg_match('/[?&]token=([^&\s"]+)/i', $request, $tm)) {
-        $token = $tm[1];
-    }
+    $token = token_from_request($request);
 
     $timeShort = preg_replace('/ \+\d+$/', '', $time);
     if (preg_match('/^(\d{2})\/(\w{3})\/(\d{4}):(\d{2}:\d{2}:\d{2})$/', $timeShort, $dm)) {
@@ -202,6 +199,7 @@ function parse_line(string $line): ?array {
         'bytes'   => $bytes,
         'ua'      => $ua,
         'token'   => $token,
+        'is_subscribe' => is_subscribe_request($request),
     ];
 }
 
@@ -223,9 +221,6 @@ function nginx_combined_to_internal(string $line): ?string {
 
 // ── 从日志行提取时间戳（用于排序）────────────────────────────
 function extract_timestamp(string $line): int {
-    if (!preg_match('/\[(\d{2}\/\w{3}\/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4})\]/', $line, $m)) {
-        return 0;
-    }
-    $dt = DateTime::createFromFormat('d/M/Y:H:i:s O', $m[1]);
+    $dt = log_datetime($line);
     return $dt ? $dt->getTimestamp() : 0;
 }

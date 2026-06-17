@@ -564,6 +564,7 @@ tr:hover td{background:rgba(99,102,241,.04)}
 <script>
 // ── 状态 ─────────────────────────────────────────────────────
 const BASE = <?= json_encode(ADMIN_SECRET_PATH !== '' ? '/' . ADMIN_SECRET_PATH : '') ?>;
+const SUBSCRIBE_PATH = <?= json_encode($_preSg['subscribe_path'] ?? '/s') ?>;
 let allLogs = [];
 let logMode = 'today';   // 'today' | 'all'
 let logLimit = 100;      // 0=瀑布流（无限制）
@@ -698,6 +699,35 @@ function esc(s) {
 // JSON.stringify 生成带引号且完整转义的 JS 字符串（含单引号、反斜杠、控制字符），
 // 再用 esc 转义 HTML 特殊字符，使其可安全放入双引号属性中（浏览器解析属性时会还原实体）。
 // 用法：onclick="fn(${jsArg(x)})"  —— 注意不要再手动加引号。
+function normalizeLogPath(path) {
+  path = String(path || '').trim();
+  if (!path) return '/';
+  if (!path.startsWith('/')) path = '/' + path;
+  path = path.replace(/\/+/g, '/');
+  return path === '/' ? '/' : path.replace(/\/+$/, '');
+}
+
+function requestPathFromLog(request) {
+  const parts = String(request || '').trim().split(/\s+/);
+  const target = parts.length >= 2 && /^[A-Z]+$/.test(parts[0]) ? parts[1] : (parts[0] || '');
+  try {
+    return normalizeLogPath(new URL(target, location.origin).pathname);
+  } catch(e) {
+    return normalizeLogPath(target.split('?')[0]);
+  }
+}
+
+function isSubscribeLog(log) {
+  if (log && log.is_subscribe) return true;
+  const path = requestPathFromLog(log ? log.request : '');
+  const prefixes = Array.from(new Set([
+    normalizeLogPath(SUBSCRIBE_PATH || '/s'),
+    '/s',
+    '/api/v1/client/subscribe',
+  ]));
+  return prefixes.some(prefix => path === prefix || path.startsWith(prefix + '/'));
+}
+
 function jsArg(v) {
   return esc(JSON.stringify(String(v ?? '')));
 }
@@ -796,7 +826,7 @@ function renderLogs() {
   const subOnly = document.querySelector('input[name="sub-filter"][value="subscribe"]').checked;
 
   let rows = allLogs.filter(l => {
-    if (subOnly && !l.request.includes('/api/v1/client/subscribe')) return false;
+    if (subOnly && !isSubscribeLog(l)) return false;
     if (fIp     && !l.ip.toLowerCase().includes(fIp)) return false;
     if (fStatus && String(l.status) !== fStatus) return false;
     if (fToken  && !l.token.toLowerCase().includes(fToken)) return false;

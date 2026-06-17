@@ -20,6 +20,11 @@ define('SETTINGS_JSON',     '/etc/nginx/subscribe/admin_settings.json');
 define('PROTECT_CONF',      '/etc/nginx/subscribe/protect.conf');
 define('DEPLOY_INFO_FILE',  '/var/log/subscribe/DEPLOY_INFO.txt');
 
+$__tz = getenv('TZ') ?: 'Asia/Shanghai';
+if (!@date_default_timezone_set($__tz)) {
+    date_default_timezone_set('Asia/Shanghai');
+}
+
 // 读取持久化设置（覆盖环境变量）
 $_sg = [];
 if (file_exists(SETTINGS_JSON)) {
@@ -51,6 +56,129 @@ function json_out(array $data, int $code = 200): void {
 
 function json_err(string $msg, int $code = 400): void {
     json_out(['ok' => false, 'error' => $msg], $code);
+}
+
+function app_timezone(): DateTimeZone {
+    static $tz = null;
+    if ($tz === null) {
+        $tz = new DateTimeZone(date_default_timezone_get());
+    }
+    return $tz;
+}
+
+function app_today_key(): string {
+    return (new DateTimeImmutable('now', app_timezone()))->format('Y-m-d');
+}
+
+function app_today_label(): string {
+    return (new DateTimeImmutable('now', app_timezone()))->format('d/M/Y');
+}
+
+function log_datetime(string $line): ?DateTimeImmutable {
+    if (!preg_match('/\[(\d{2}\/\w{3}\/\d{4}:\d{2}:\d{2}:\d{2})(?: ([+-]\d{4}))?\]/', $line, $m)) {
+        return null;
+    }
+
+    if (!empty($m[2])) {
+        $dt = DateTimeImmutable::createFromFormat('!d/M/Y:H:i:s O', $m[1] . ' ' . $m[2]);
+    } else {
+        $dt = DateTimeImmutable::createFromFormat('!d/M/Y:H:i:s', $m[1], app_timezone());
+    }
+
+    return $dt ?: null;
+}
+
+function log_line_is_today(string $line): bool {
+    $dt = log_datetime($line);
+    if (!$dt) return false;
+    return $dt->setTimezone(app_timezone())->format('Y-m-d') === app_today_key();
+}
+
+function normalize_path_value(string $path, string $default = '/'): string {
+    $path = trim($path);
+    if ($path === '') return $default;
+    if (!str_starts_with($path, '/')) $path = '/' . $path;
+    $path = preg_replace('#/+#', '/', $path);
+    return $path === '/' ? '/' : rtrim($path, '/');
+}
+
+function current_subscribe_path(): string {
+    static $path = null;
+    if ($path !== null) return $path;
+
+    $raw = '';
+    if (file_exists(SETTINGS_JSON)) {
+        $data = json_decode(file_get_contents(SETTINGS_JSON), true);
+        if (is_array($data) && !empty($data['subscribe_path'])) {
+            $raw = (string)$data['subscribe_path'];
+        }
+    }
+    if ($raw === '' && file_exists(PROTECT_CONF)) {
+        $conf = file_get_contents(PROTECT_CONF);
+        if ($conf !== false && preg_match('/^location\s+\^~\s+(\S+)/m', $conf, $m)) {
+            $raw = $m[1];
+        }
+    }
+    if ($raw === '') $raw = getenv('SUBSCRIBE_PATH') ?: '/s';
+
+    $path = normalize_path_value($raw, '/s');
+    return $path;
+}
+
+function request_target_from_log(string $request): string {
+    $parts = preg_split('/\s+/', trim($request));
+    if (count($parts) >= 2 && preg_match('/^[A-Z]+$/', $parts[0])) {
+        return $parts[1];
+    }
+    return $parts[0] ?? '';
+}
+
+function request_path_from_log(string $request): string {
+    $target = request_target_from_log($request);
+    $path = parse_url($target, PHP_URL_PATH);
+    if (!is_string($path) || $path === '') {
+        $path = explode('?', $target, 2)[0] ?? '';
+    }
+    return normalize_path_value($path, '/');
+}
+
+function subscribe_path_candidates(): array {
+    return array_values(array_unique([
+        current_subscribe_path(),
+        '/s',
+        '/api/v1/client/subscribe',
+    ]));
+}
+
+function is_subscribe_request(string $request): bool {
+    $path = request_path_from_log($request);
+    foreach (subscribe_path_candidates() as $prefix) {
+        $prefix = normalize_path_value($prefix, '/s');
+        if ($path === $prefix || str_starts_with($path, $prefix . '/')) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function token_from_request(string $request): string {
+    if (preg_match('/[?&]token=([^&\s"]+)/i', $request, $m)) {
+        return rawurldecode($m[1]);
+    }
+
+    if (!is_subscribe_request($request)) return '';
+
+    $path = request_path_from_log($request);
+    foreach (subscribe_path_candidates() as $prefix) {
+        $prefix = normalize_path_value($prefix, '/s');
+        if (str_starts_with($path, $prefix . '/')) {
+            $rest = substr($path, strlen($prefix) + 1);
+            $token = strtok($rest, '/');
+            return $token ? rawurldecode($token) : '';
+        }
+    }
+
+    return '';
 }
 
 /**
