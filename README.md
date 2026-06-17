@@ -168,7 +168,8 @@ docker logs -f subscribe-admin
 docker compose restart
 
 # 完整重建
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 
 # 进入 gateway 容器调试
 docker exec -it subscribe-gateway sh

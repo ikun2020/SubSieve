@@ -36,6 +36,9 @@ echo
 
 V2B_HOST_DEFAULT=""
 SUBSCRIBE_PATH_DEFAULT="/s"
+GATEWAY_IMAGE_DEFAULT="ghcr.io/ikun2020/subsieve-gateway:latest"
+ADMIN_IMAGE_DEFAULT="ghcr.io/ikun2020/subsieve-admin:latest"
+LOCAL_BUILD_DEFAULT="0"
 GATEWAY_BIND_DEFAULT="127.0.0.1"
 GATEWAY_PORT_DEFAULT="3333"
 ADMIN_BIND_DEFAULT="127.0.0.1"
@@ -51,6 +54,9 @@ if [ -f .env ]; then
     set +a
     V2B_HOST_DEFAULT="${V2B_HOST:-}"
     SUBSCRIBE_PATH_DEFAULT="${SUBSCRIBE_PATH:-/s}"
+    GATEWAY_IMAGE_DEFAULT="${GATEWAY_IMAGE:-ghcr.io/ikun2020/subsieve-gateway:latest}"
+    ADMIN_IMAGE_DEFAULT="${ADMIN_IMAGE:-ghcr.io/ikun2020/subsieve-admin:latest}"
+    LOCAL_BUILD_DEFAULT="${LOCAL_BUILD:-0}"
     GATEWAY_BIND_DEFAULT="${GATEWAY_BIND:-127.0.0.1}"
     GATEWAY_PORT_DEFAULT="${GATEWAY_PORT:-3333}"
     ADMIN_BIND_DEFAULT="${ADMIN_BIND:-127.0.0.1}"
@@ -68,6 +74,9 @@ if [ -z "$V2B_HOST" ]; then
     exit 1
 fi
 V2B_BACKEND="https://${V2B_HOST}"
+GATEWAY_IMAGE="${GATEWAY_IMAGE_DEFAULT}"
+ADMIN_IMAGE="${ADMIN_IMAGE_DEFAULT}"
+LOCAL_BUILD="${LOCAL_BUILD_DEFAULT}"
 
 ask "Subscription path exposed by this gateway" "$SUBSCRIBE_PATH_DEFAULT" SUBSCRIBE_PATH
 ask "Gateway bind address" "$GATEWAY_BIND_DEFAULT" GATEWAY_BIND
@@ -83,6 +92,10 @@ V2B_BACKEND=${V2B_BACKEND}
 V2B_HOST=${V2B_HOST}
 SUBSCRIBE_PATH=${SUBSCRIBE_PATH}
 
+GATEWAY_IMAGE=${GATEWAY_IMAGE}
+ADMIN_IMAGE=${ADMIN_IMAGE}
+LOCAL_BUILD=${LOCAL_BUILD}
+
 GATEWAY_BIND=${GATEWAY_BIND}
 GATEWAY_PORT=${GATEWAY_PORT}
 ADMIN_BIND=${ADMIN_BIND}
@@ -97,7 +110,12 @@ EOF
 echo
 echo ".env written."
 echo "Starting containers..."
-docker compose up -d --build
+if [ "${LOCAL_BUILD}" = "1" ]; then
+    docker compose up -d --build --remove-orphans
+else
+    docker compose pull
+    docker compose up -d --remove-orphans
+fi
 
 cat > DEPLOY_INFO.txt <<EOF
 SubSieve reverse-proxy mode

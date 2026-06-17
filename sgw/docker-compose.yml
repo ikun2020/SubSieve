@@ -1,5 +1,6 @@
 services:
   gateway:
+    image: ${GATEWAY_IMAGE:-ghcr.io/ikun2020/subsieve-gateway:latest}
     build: ./gateway
     container_name: subscribe-gateway
     restart: unless-stopped
@@ -14,6 +15,7 @@ services:
       - gw_logs:/var/log/subscribe
 
   admin:
+    image: ${ADMIN_IMAGE:-ghcr.io/ikun2020/subsieve-admin:latest}
     build: ./admin
     container_name: subscribe-admin
     restart: unless-stopped

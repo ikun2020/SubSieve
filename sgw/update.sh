@@ -92,7 +92,15 @@ fi
 # 重新构建并重启容器
 echo ""
 echo -e "${CYAN}正在重新构建容器…${RESET}"
-docker compose up -d --build
+LOCAL_BUILD=$(grep '^LOCAL_BUILD=' .env 2>/dev/null | cut -d= -f2 || true)
+if [[ "$LOCAL_BUILD" == "1" ]]; then
+    echo -e "${CYAN}Building containers locally...${RESET}"
+    docker compose up -d --build --remove-orphans
+else
+    echo -e "${CYAN}Pulling published images...${RESET}"
+    docker compose pull
+    docker compose up -d --remove-orphans
+fi
 
 # 清理旧镜像
 echo -e "${CYAN}清理旧镜像…${RESET}"

@@ -12,14 +12,34 @@ domains, HTTPS certificates, and public ports.
 The containers do not bind host ports `80` or `443`, and they do not require
 `ssl/cert.pem` or `ssl/key.pem`.
 
+## GitHub Actions Image Build
+
+The `Build Docker Images` workflow only builds and publishes Docker images to
+GitHub Container Registry. It does not SSH into your server and does not need
+server IP addresses or private keys.
+
+Published images:
+
+- `ghcr.io/ikun2020/subsieve-gateway:latest`
+- `ghcr.io/ikun2020/subsieve-admin:latest`
+- `ghcr.io/ikun2020/subsieve-gateway:sha-xxxxxxx`
+- `ghcr.io/ikun2020/subsieve-admin:sha-xxxxxxx`
+
+The workflow uses the automatic `GITHUB_TOKEN` with `packages: write`
+permission. No custom Actions secrets are required for building images.
+
 ## Server Environment
 
-Create `sgw/.env` manually or let GitHub Actions create it:
+Create `sgw/.env` manually or run `./setup.sh`:
 
 ```env
 V2B_BACKEND=https://upstream.example.com
 V2B_HOST=upstream.example.com
 SUBSCRIBE_PATH=/s
+
+GATEWAY_IMAGE=ghcr.io/ikun2020/subsieve-gateway:latest
+ADMIN_IMAGE=ghcr.io/ikun2020/subsieve-admin:latest
+LOCAL_BUILD=0
 
 GATEWAY_BIND=127.0.0.1
 GATEWAY_PORT=3333
@@ -32,12 +52,23 @@ ADMIN_SECRET_PATH=change-this-secret-path
 GATEWAY_CONTAINER=subscribe-gateway
 ```
 
-Start or update:
+Start or update from published images:
 
 ```bash
 cd SubSieve/sgw
+docker compose pull
+docker compose up -d
+```
+
+If you want to rebuild locally on the server instead of pulling published
+images, set `LOCAL_BUILD=1` in `.env` and run:
+
+```bash
 docker compose up -d --build
 ```
+
+If GHCR packages are private, either make the packages public in GitHub or log
+in on the server before `docker compose pull`.
 
 ## Host Nginx Example
 
@@ -74,27 +105,3 @@ location /admin-secret-path/ {
     proxy_pass http://127.0.0.1:3334;
 }
 ```
-
-## GitHub Actions Secrets
-
-Required:
-
-- `DEPLOY_HOST`
-- `DEPLOY_USER`
-- `DEPLOY_SSH_KEY`
-- `V2B_BACKEND`
-- `V2B_HOST`
-- `ADMIN_PASS`
-- `ADMIN_SECRET_PATH`
-
-Optional:
-
-- `DEPLOY_PORT` defaults to `22`
-- `DEPLOY_PATH` defaults to `~/SubSieve`
-- `SUBSCRIBE_PATH` defaults to `/s`
-- `GATEWAY_BIND` defaults to `127.0.0.1`
-- `GATEWAY_PORT` defaults to `3333`
-- `ADMIN_BIND` defaults to `127.0.0.1`
-- `ADMIN_PORT` defaults to `3334`
-- `ADMIN_USER` defaults to `admin`
-

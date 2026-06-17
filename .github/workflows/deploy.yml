@@ -1,81 +1,63 @@
-name: Deploy
+name: Build Docker Images
 
 'on':
   workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_BASENAME: subsieve
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Configure SSH
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        shell: bash
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$GHCR_TOKEN" | docker login "$REGISTRY" -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Build and push images
         shell: bash
         run: |
-          require_secret() {
-            local name="$1"
-            local value="${!name:-}"
-            if [ -z "$value" ]; then
-              echo "::error::Missing required repository secret: $name"
-              exit 1
-            fi
-          }
-
-          require_secret DEPLOY_HOST
-          require_secret DEPLOY_USER
-          require_secret DEPLOY_SSH_KEY
-
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          if ! ssh-keyscan -T 10 -p "${DEPLOY_PORT:-22}" "$DEPLOY_HOST" >> ~/.ssh/known_hosts; then
-            echo "::error::Unable to scan SSH host key for $DEPLOY_HOST:${DEPLOY_PORT:-22}. Check DEPLOY_HOST, DEPLOY_PORT, and firewall rules."
-            exit 1
-          fi
-
-      - name: Pull and deploy on server
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-          REPO_URL: https://github.com/${{ github.repository }}.git
-          REF_NAME: ${{ github.ref_name }}
-        shell: bash
-        run: |
-          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "$DEPLOY_USER@$DEPLOY_HOST" \
-            "DEPLOY_PATH='${DEPLOY_PATH}' REPO_URL='${REPO_URL}' REF_NAME='${REF_NAME}' bash -s" <<'REMOTE'
           set -euo pipefail
 
-          APP_DIR="${DEPLOY_PATH:-$HOME/SubSieve}"
-          if [ -d "$APP_DIR/.git" ]; then
-            git -C "$APP_DIR" fetch origin "$REF_NAME"
-            git -C "$APP_DIR" reset --hard "origin/$REF_NAME"
-          else
-            git clone --branch "$REF_NAME" "$REPO_URL" "$APP_DIR"
-          fi
-          cd "$APP_DIR/sgw"
+          owner="$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+          short_sha="${GITHUB_SHA::7}"
+          gateway_image="${REGISTRY}/${owner}/${IMAGE_BASENAME}-gateway"
+          admin_image="${REGISTRY}/${owner}/${IMAGE_BASENAME}-admin"
 
-          cat > .env <<'EOF'
-          V2B_BACKEND=${{ secrets.V2B_BACKEND }}
-          V2B_HOST=${{ secrets.V2B_HOST }}
-          SUBSCRIBE_PATH=${{ secrets.SUBSCRIBE_PATH || '/s' }}
+          docker build \
+            -t "${gateway_image}:latest" \
+            -t "${gateway_image}:sha-${short_sha}" \
+            sgw/gateway
 
-          GATEWAY_BIND=${{ secrets.GATEWAY_BIND || '127.0.0.1' }}
-          GATEWAY_PORT=${{ secrets.GATEWAY_PORT || '3333' }}
-          ADMIN_BIND=${{ secrets.ADMIN_BIND || '127.0.0.1' }}
-          ADMIN_PORT=${{ secrets.ADMIN_PORT || '3334' }}
+          docker build \
+            -t "${admin_image}:latest" \
+            -t "${admin_image}:sha-${short_sha}" \
+            sgw/admin
 
-          ADMIN_USER=${{ secrets.ADMIN_USER || 'admin' }}
-          ADMIN_PASS=${{ secrets.ADMIN_PASS }}
-          ADMIN_SECRET_PATH=${{ secrets.ADMIN_SECRET_PATH }}
-          GATEWAY_CONTAINER=subscribe-gateway
-          EOF
+          docker push "${gateway_image}:latest"
+          docker push "${gateway_image}:sha-${short_sha}"
+          docker push "${admin_image}:latest"
+          docker push "${admin_image}:sha-${short_sha}"
 
-          docker compose up -d --build --remove-orphans
-          docker image prune -f --filter "dangling=true" >/dev/null 2>&1 || true
-          docker compose ps
-          REMOTE
+          {
+            echo "### Published Docker images"
+            echo
+            echo "- \`${gateway_image}:latest\`"
+            echo "- \`${gateway_image}:sha-${short_sha}\`"
+            echo "- \`${admin_image}:latest\`"
+            echo "- \`${admin_image}:sha-${short_sha}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
