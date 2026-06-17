@@ -1,0 +1,70 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          test -n "$DEPLOY_SSH_KEY"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${DEPLOY_PORT:-22}" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Pull and deploy on server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          REPO_URL: https://github.com/${{ github.repository }}.git
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' REPO_URL='${REPO_URL}' REF_NAME='${REF_NAME}' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          APP_DIR="${DEPLOY_PATH:-$HOME/SubSieve}"
+          if [ -d "$APP_DIR/.git" ]; then
+            git -C "$APP_DIR" fetch origin "$REF_NAME"
+            git -C "$APP_DIR" reset --hard "origin/$REF_NAME"
+          else
+            git clone --branch "$REF_NAME" "$REPO_URL" "$APP_DIR"
+          fi
+          cd "$APP_DIR/sgw"
+
+          cat > .env <<'EOF'
+V2B_BACKEND=${{ secrets.V2B_BACKEND }}
+V2B_HOST=${{ secrets.V2B_HOST }}
+SUBSCRIBE_PATH=${{ secrets.SUBSCRIBE_PATH || '/s' }}
+
+GATEWAY_BIND=${{ secrets.GATEWAY_BIND || '127.0.0.1' }}
+GATEWAY_PORT=${{ secrets.GATEWAY_PORT || '3333' }}
+ADMIN_BIND=${{ secrets.ADMIN_BIND || '127.0.0.1' }}
+ADMIN_PORT=${{ secrets.ADMIN_PORT || '3334' }}
+
+ADMIN_USER=${{ secrets.ADMIN_USER || 'admin' }}
+ADMIN_PASS=${{ secrets.ADMIN_PASS }}
+ADMIN_SECRET_PATH=${{ secrets.ADMIN_SECRET_PATH }}
+GATEWAY_CONTAINER=subscribe-gateway
+EOF
+
+          docker compose up -d --build --remove-orphans
+          docker image prune -f --filter "dangling=true" >/dev/null 2>&1 || true
+          docker compose ps
+REMOTE
+

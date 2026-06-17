@@ -1,5 +1,16 @@
 # SubSieve
 
+## Local reverse-proxy mode
+
+This fork is configured for reverse-proxy deployment by default:
+
+- gateway listens on `127.0.0.1:3333`
+- admin listens on `127.0.0.1:3334`
+- subscription path defaults to `/s`
+- public domains, HTTPS certificates, and ports `80/443` are handled by the host web server
+
+See [docs/reverse-proxy-deploy.md](docs/reverse-proxy-deploy.md) for GitHub Actions deployment and host Nginx examples.
+
 订阅清洗网关 + 可视化管理后台，Docker Compose 一键部署。
 
 订阅请求先经过黑名单、云厂商 IP 识别、UA 过滤、速率限制等多层拦截，通过后才反代到机场后端，防止订阅链接被扫描或滥用。

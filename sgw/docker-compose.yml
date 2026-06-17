@@ -1,19 +1,15 @@
-version: '3.8'
-
 services:
   gateway:
     build: ./gateway
     container_name: subscribe-gateway
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "${GATEWAY_PORT:-443}:443"
+      - "${GATEWAY_BIND:-127.0.0.1}:${GATEWAY_PORT:-3333}:80"
     environment:
       - V2B_BACKEND=${V2B_BACKEND}
       - V2B_HOST=${V2B_HOST}
-      - SUBSCRIBE_PATH=${SUBSCRIBE_PATH:-/api/v1/client/subscribe}
+      - SUBSCRIBE_PATH=${SUBSCRIBE_PATH:-/s}
     volumes:
-      - ./ssl:/etc/nginx/ssl:ro
       - gw_config:/etc/nginx/subscribe
       - gw_logs:/var/log/subscribe
 
@@ -22,14 +18,13 @@ services:
     container_name: subscribe-admin
     restart: unless-stopped
     ports:
-      - "64444:64444"
+      - "${ADMIN_BIND:-127.0.0.1}:${ADMIN_PORT:-3334}:64444"
     environment:
       - ADMIN_USER=${ADMIN_USER:-admin}
       - ADMIN_PASS=${ADMIN_PASS}
       - ADMIN_SECRET_PATH=${ADMIN_SECRET_PATH}
-      - GATEWAY_PORT=${GATEWAY_PORT:-443}
+      - GATEWAY_PORT=${GATEWAY_PORT:-3333}
     volumes:
-      - ./ssl:/etc/nginx/ssl:ro
       - gw_config:/etc/nginx/subscribe
       - gw_logs:/var/log/subscribe
 

@@ -548,8 +548,7 @@ tr:hover td{background:rgba(99,102,241,.04)}
           <div class="card-title">SSL 证书</div>
           <div id="cert-info"><div class="loading">加载中…</div></div>
           <div class="apply-hint" style="margin-top:12px;color:var(--text3)">
-            证书文件位置：<code style="font-size:11px;background:var(--bg);padding:2px 5px;border-radius:3px">/etc/nginx/ssl/cert.pem</code><br>
-            如需更换证书，请替换宿主机 <code style="font-size:11px;background:var(--bg);padding:2px 5px;border-radius:3px">sgw/ssl/</code> 目录下的文件后重启容器
+            TLS certificates are managed by the host reverse proxy. The containers only listen on localhost HTTP ports.
           </div>
         </div>
 
@@ -1725,7 +1724,9 @@ async function loadSettings() {
   // 显示证书信息
   const cert = data.cert || {};
   const certEl = document.getElementById('cert-info');
-  if (!cert.exists) {
+  if (cert.external) {
+    certEl.innerHTML = '<div class="empty" style="color:#22c55e">TLS is handled by the host reverse proxy</div>';
+  } else if (!cert.exists) {
     certEl.innerHTML = '<div class="empty" style="color:#ef4444">⚠️ 未找到证书文件</div>';
   } else if (cert.subject) {
     const color = cert.days_left > 30 ? '#22c55e' : cert.days_left > 7 ? '#eab308' : '#ef4444';

@@ -116,7 +116,8 @@ for NAME in subscribe-gateway subscribe-admin; do
 done
 
 # 检查管理后台端口是否可达
-ADMIN_PORT=64444
+ADMIN_PORT=$(grep '^ADMIN_PORT=' .env 2>/dev/null | cut -d= -f2 || true)
+ADMIN_PORT=${ADMIN_PORT:-3334}
 if (echo > /dev/tcp/localhost/$ADMIN_PORT) 2>/dev/null; then
     echo -e "  ✅ 管理后台端口 ${ADMIN_PORT} 可达"
 else
