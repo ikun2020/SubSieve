@@ -10,9 +10,22 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [entrypoint] $*" | tee -a "$LOG"; }
 [[ -z "${V2B_HOST:-}" ]]    && { echo "❌ V2B_HOST 未设置"; exit 1; }
 
 log "生成 protect.conf ..."
-envsubst '${V2B_BACKEND} ${V2B_HOST} ${SUBSCRIBE_PATH}' \
-    < /etc/nginx/templates-src/subscribe_protect.conf.template \
-    > /etc/nginx/subscribe/protect.conf
+SUBSCRIBE_PATH="${SUBSCRIBE_PATH:-/s}"
+LEGACY_SUBSCRIBE_PATH="/api/v1/client/subscribe"
+
+render_protect_location() {
+    local path="$1"
+    SUBSCRIBE_PATH="$path" envsubst '${V2B_BACKEND} ${V2B_HOST} ${SUBSCRIBE_PATH}' \
+        < /etc/nginx/templates-src/subscribe_protect.conf.template
+}
+
+render_protect_location "$SUBSCRIBE_PATH" > /etc/nginx/subscribe/protect.conf
+if [[ "$SUBSCRIBE_PATH" != "$LEGACY_SUBSCRIBE_PATH" ]]; then
+    {
+        echo ""
+        render_protect_location "$LEGACY_SUBSCRIBE_PATH"
+    } >> /etc/nginx/subscribe/protect.conf
+fi
 
 cp /etc/nginx/templates-src/nginx.conf /etc/nginx/nginx.conf
 

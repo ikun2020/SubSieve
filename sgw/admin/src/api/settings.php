@@ -152,7 +152,26 @@ function write_settings(array $s): bool {
  * 重新生成 protect.conf（覆盖上游配置）
  */
 function write_protect_conf(string $subscribePath, string $backend, string $host): bool {
-    $conf = <<<NGINX
+    $paths = [];
+    $seen = [];
+    foreach ([$subscribePath, '/api/v1/client/subscribe'] as $path) {
+        $path = safe_conf_value($path);
+        if (!str_starts_with($path, '/')) $path = '/' . $path;
+        if (isset($seen[$path])) continue;
+        $seen[$path] = true;
+        $paths[] = $path;
+    }
+
+    $blocks = [];
+    foreach ($paths as $path) {
+        $blocks[] = protect_location_block($path, $backend, $host);
+    }
+
+    return file_put_contents(PROTECT_CONF, implode("\n\n", $blocks) . "\n", LOCK_EX) !== false;
+}
+
+function protect_location_block(string $subscribePath, string $backend, string $host): string {
+    return <<<NGINX
 location ^~ $subscribePath {
 
     if (\$whitelist_ip = 1) { set \$block_reason ""; }
@@ -189,7 +208,6 @@ location ^~ $subscribePath {
     add_header X-Subscribe-Filter "active";
 }
 NGINX;
-    return file_put_contents(PROTECT_CONF, $conf, LOCK_EX) !== false;
 }
 
 /**
