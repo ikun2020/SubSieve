@@ -96,6 +96,14 @@ server {
 }
 ```
 
+The gateway trusts local private reverse proxies and restores `$remote_addr`
+from `X-Forwarded-For`. Keep `GATEWAY_BIND=127.0.0.1` unless you explicitly
+want the gateway port exposed.
+
+If the domain is behind Cloudflare orange cloud, configure real IP restoration
+on the host Nginx first. Otherwise the gateway will see the Cloudflare edge IP
+instead of the visitor IP.
+
 Admin should normally stay private. If you need to proxy it, restrict it by IP:
 
 ```nginx
