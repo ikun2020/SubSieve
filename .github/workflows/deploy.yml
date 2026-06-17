@@ -48,23 +48,22 @@ jobs:
           cd "$APP_DIR/sgw"
 
           cat > .env <<'EOF'
-V2B_BACKEND=${{ secrets.V2B_BACKEND }}
-V2B_HOST=${{ secrets.V2B_HOST }}
-SUBSCRIBE_PATH=${{ secrets.SUBSCRIBE_PATH || '/s' }}
+          V2B_BACKEND=${{ secrets.V2B_BACKEND }}
+          V2B_HOST=${{ secrets.V2B_HOST }}
+          SUBSCRIBE_PATH=${{ secrets.SUBSCRIBE_PATH || '/s' }}
 
-GATEWAY_BIND=${{ secrets.GATEWAY_BIND || '127.0.0.1' }}
-GATEWAY_PORT=${{ secrets.GATEWAY_PORT || '3333' }}
-ADMIN_BIND=${{ secrets.ADMIN_BIND || '127.0.0.1' }}
-ADMIN_PORT=${{ secrets.ADMIN_PORT || '3334' }}
+          GATEWAY_BIND=${{ secrets.GATEWAY_BIND || '127.0.0.1' }}
+          GATEWAY_PORT=${{ secrets.GATEWAY_PORT || '3333' }}
+          ADMIN_BIND=${{ secrets.ADMIN_BIND || '127.0.0.1' }}
+          ADMIN_PORT=${{ secrets.ADMIN_PORT || '3334' }}
 
-ADMIN_USER=${{ secrets.ADMIN_USER || 'admin' }}
-ADMIN_PASS=${{ secrets.ADMIN_PASS }}
-ADMIN_SECRET_PATH=${{ secrets.ADMIN_SECRET_PATH }}
-GATEWAY_CONTAINER=subscribe-gateway
-EOF
+          ADMIN_USER=${{ secrets.ADMIN_USER || 'admin' }}
+          ADMIN_PASS=${{ secrets.ADMIN_PASS }}
+          ADMIN_SECRET_PATH=${{ secrets.ADMIN_SECRET_PATH }}
+          GATEWAY_CONTAINER=subscribe-gateway
+          EOF
 
           docker compose up -d --build --remove-orphans
           docker image prune -f --filter "dangling=true" >/dev/null 2>&1 || true
           docker compose ps
-REMOTE
-
+          REMOTE
