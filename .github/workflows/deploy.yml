@@ -1,10 +1,7 @@
 name: Deploy
 
-on:
+'on':
   workflow_dispatch:
-  push:
-    branches:
-      - main
 
 jobs:
   deploy:
@@ -16,14 +13,28 @@ jobs:
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        shell: bash
         run: |
-          test -n "$DEPLOY_HOST"
-          test -n "$DEPLOY_USER"
-          test -n "$DEPLOY_SSH_KEY"
+          require_secret() {
+            local name="$1"
+            local value="${!name:-}"
+            if [ -z "$value" ]; then
+              echo "::error::Missing required repository secret: $name"
+              exit 1
+            fi
+          }
+
+          require_secret DEPLOY_HOST
+          require_secret DEPLOY_USER
+          require_secret DEPLOY_SSH_KEY
+
           install -m 700 -d ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p "${DEPLOY_PORT:-22}" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          if ! ssh-keyscan -T 10 -p "${DEPLOY_PORT:-22}" "$DEPLOY_HOST" >> ~/.ssh/known_hosts; then
+            echo "::error::Unable to scan SSH host key for $DEPLOY_HOST:${DEPLOY_PORT:-22}. Check DEPLOY_HOST, DEPLOY_PORT, and firewall rules."
+            exit 1
+          fi
 
       - name: Pull and deploy on server
         env:
@@ -33,6 +44,7 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           REPO_URL: https://github.com/${{ github.repository }}.git
           REF_NAME: ${{ github.ref_name }}
+        shell: bash
         run: |
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "$DEPLOY_USER@$DEPLOY_HOST" \
             "DEPLOY_PATH='${DEPLOY_PATH}' REPO_URL='${REPO_URL}' REF_NAME='${REF_NAME}' bash -s" <<'REMOTE'
