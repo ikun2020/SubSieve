@@ -149,7 +149,7 @@ if ($method === 'DELETE') {
 // ── GET — 返回日志列表 ──────────────────────────────────────
 $mode    = $_GET['mode'] ?? 'today';
 $today   = app_today_label();
-$maxRows = 3000;
+$maxRows = 10000;
 $logs    = [];
 
 if (file_exists(LOG_FILE)) {
