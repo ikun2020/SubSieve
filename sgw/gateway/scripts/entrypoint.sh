@@ -28,6 +28,8 @@ if [[ "$SUBSCRIBE_PATH" != "$LEGACY_SUBSCRIBE_PATH" ]]; then
 fi
 
 cp /etc/nginx/templates-src/nginx.conf /etc/nginx/nginx.conf
+cp /etc/nginx/templates-src/cloudflare_real_ip.conf /etc/nginx/subscribe/cloudflare_real_ip.conf
+chmod 644 /etc/nginx/subscribe/cloudflare_real_ip.conf
 
 # 初始化空白名单
 [[ ! -f /etc/nginx/subscribe/whitelist_ips.txt ]] && touch /etc/nginx/subscribe/whitelist_ips.txt
