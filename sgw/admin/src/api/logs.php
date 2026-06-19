@@ -176,11 +176,16 @@ json_out(['ok' => true, 'logs' => $logs, 'date' => $today, 'mode' => $mode]);
 
 // ── 解析一行内部格式日志 ──────────────────────────────────────
 function parse_line(string $line): ?array {
-    // 内部格式: IP [time] "REQUEST" STATUS BYTES "UA"
-    $pat = '/^(\S+) \[([^\]]+)\] "([^"]*)" (\d+) (\S+) "([^"]*)"$/';
-    if (!preg_match($pat, $line, $m)) return null;
+    $parsed = parse_access_log_line($line);
+    if (!$parsed) return null;
 
-    [, $ip, $time, $request, $status, $bytes, $ua] = $m;
+    $ip = $parsed['ip'];
+    $time = $parsed['time'];
+    $host = $parsed['host'];
+    $request = $parsed['request'];
+    $status = $parsed['status'];
+    $bytes = $parsed['bytes'];
+    $ua = $parsed['ua'];
 
     $token = token_from_request($request);
 
@@ -194,8 +199,9 @@ function parse_line(string $line): ?array {
     return [
         'ip'      => $ip,
         'time'    => $timeShort,
+        'host'    => $host,
         'request' => $request,
-        'status'  => (int)$status,
+        'status'  => $status,
         'bytes'   => $bytes,
         'ua'      => $ua,
         'token'   => $token,
@@ -207,14 +213,14 @@ function parse_line(string $line): ?array {
 // nginx combined: IP - user [time] "request" status bytes "referer" "ua"
 // 内部格式:       IP [time] "request" status bytes "ua"
 function nginx_combined_to_internal(string $line): ?string {
+    if (parse_access_log_line($line) !== null) {
+        return $line;
+    }
+
     $pat = '/^(\S+) \S+ \S+ \[([^\]]+)\] "([^"]*)" (\d+) (\S+) "[^"]*" "([^"]*)"$/';
     if (preg_match($pat, $line, $m)) {
         [, $ip, $time, $request, $status, $bytes, $ua] = $m;
         return "$ip [$time] \"$request\" $status $bytes \"$ua\"";
-    }
-    // 如果已经是内部格式，直接返回
-    if (preg_match('/^\S+ \[[^\]]+\] "[^"]*" \d+ \S+ "[^"]*"$/', $line)) {
-        return $line;
     }
     return null;
 }

@@ -39,11 +39,14 @@ if (file_exists(LOG_FILE)) {
             $line = rtrim($line);
             if ($line === '') continue;
 
-            $pat = '/^(\S+) \[([^\]]+)\] "([^"]*)" (\d+) (\S+) "([^"]*)"$/';
-            if (!preg_match($pat, $line, $m)) continue;
+            $parsed = parse_access_log_line($line);
+            if (!$parsed) continue;
 
-            [, $ip, $time, $request, $status, , $ua] = $m;
-            $status = (int)$status;
+            $ip = $parsed['ip'];
+            $time = $parsed['time'];
+            $request = $parsed['request'];
+            $status = $parsed['status'];
+            $ua = $parsed['ua'];
 
             // ── 今日统计 ──────────────────────────────────────────
             if (log_line_is_today($line)) {

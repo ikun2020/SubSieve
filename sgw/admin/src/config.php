@@ -94,6 +94,40 @@ function log_line_is_today(string $line): bool {
     return $dt->setTimezone(app_timezone())->format('Y-m-d') === app_today_key();
 }
 
+function parse_access_log_line(string $line): ?array {
+    $line = rtrim($line);
+
+    // Current internal format: IP [time] "HOST" "REQUEST" STATUS BYTES "UA"
+    $patWithHost = '/^(\S+) \[([^\]]+)\] "([^"]*)" "([^"]*)" (\d+) (\S+) "([^"]*)"$/';
+    if (preg_match($patWithHost, $line, $m)) {
+        return [
+            'ip'      => $m[1],
+            'time'    => $m[2],
+            'host'    => $m[3],
+            'request' => $m[4],
+            'status'  => (int)$m[5],
+            'bytes'   => $m[6],
+            'ua'      => $m[7],
+        ];
+    }
+
+    // Legacy internal format: IP [time] "REQUEST" STATUS BYTES "UA"
+    $patLegacy = '/^(\S+) \[([^\]]+)\] "([^"]*)" (\d+) (\S+) "([^"]*)"$/';
+    if (preg_match($patLegacy, $line, $m)) {
+        return [
+            'ip'      => $m[1],
+            'time'    => $m[2],
+            'host'    => '',
+            'request' => $m[3],
+            'status'  => (int)$m[4],
+            'bytes'   => $m[5],
+            'ua'      => $m[6],
+        ];
+    }
+
+    return null;
+}
+
 function normalize_path_value(string $path, string $default = '/'): string {
     $path = trim($path);
     if ($path === '') return $default;

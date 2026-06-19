@@ -274,11 +274,11 @@ tr:hover td{background:rgba(99,102,241,.04)}
           <table>
             <thead>
               <tr>
-                <th>时间</th><th>IP</th><th style="color:#64748b;font-weight:400;font-size:11px" title="显示该IP在白/黑名单中的备注，如需修改请前往对应管理页">备注 <span style="opacity:.6">（只读）</span></th><th>状态</th><th>Token</th>
+                <th>时间</th><th>IP</th><th>域名</th><th style="color:#64748b;font-weight:400;font-size:11px" title="显示该IP在白/黑名单中的备注，如需修改请前往对应管理页">备注 <span style="opacity:.6">（只读）</span></th><th>状态</th><th>Token</th>
                 <th>请求</th><th>UA</th>
               </tr>
             </thead>
-            <tbody id="log-tbody"><tr><td colspan="7" class="loading">加载中…</td></tr></tbody>
+            <tbody id="log-tbody"><tr><td colspan="8" class="loading">加载中…</td></tr></tbody>
           </table>
         </div>
         <!-- 分页控件（瀑布流模式下隐藏） -->
@@ -798,7 +798,7 @@ function isCloudIp(ip) {
 
 // ── 日志 ──────────────────────────────────────────────────────
 async function loadLogs() {
-  document.getElementById('log-tbody').innerHTML = '<tr><td colspan="7" class="loading">加载中…</td></tr>';
+  document.getElementById('log-tbody').innerHTML = '<tr><td colspan="8" class="loading">加载中…</td></tr>';
   const [logsData, blData, cloudData, wlData] = await Promise.all([
     apiFetch('/api/logs.php?mode=' + logMode),
     apiFetch('/api/blacklist.php?no_idc=1'),
@@ -811,7 +811,7 @@ async function loadLogs() {
   wlCommentMap = {}; (wlData.entries || []).forEach(e => wlCommentMap[e.ip] = e.comment || '');
   blCommentMap = {}; (blData.entries || []).forEach(e => blCommentMap[e.ip] = e.comment || '');
   if (!logsData.ok) {
-    document.getElementById('log-tbody').innerHTML = '<tr><td colspan="7" class="empty">加载失败：' + esc(logsData.error||'未知错误') + '</td></tr>';
+    document.getElementById('log-tbody').innerHTML = '<tr><td colspan="8" class="empty">加载失败：' + esc(logsData.error||'未知错误') + '</td></tr>';
     toast('加载日志失败: ' + (logsData.error||''), 'err'); return;
   }
   allLogs = logsData.logs || [];
@@ -866,7 +866,7 @@ function renderLogs() {
 
     if (!displayRows.length) {
       document.getElementById('log-tbody').innerHTML =
-        '<tr><td colspan="7" class="empty">暂无匹配记录</td></tr>';
+        '<tr><td colspan="8" class="empty">暂无匹配记录</td></tr>';
       return;
     }
     renderLogRows(displayRows);
@@ -876,7 +876,7 @@ function renderLogs() {
     document.getElementById('log-count').textContent = `${total} / ${allLogs.length} 条`;
     if (!total) {
       document.getElementById('log-tbody').innerHTML =
-        '<tr><td colspan="7" class="empty">暂无匹配记录</td></tr>';
+        '<tr><td colspan="8" class="empty">暂无匹配记录</td></tr>';
       return;
     }
     renderLogRows(rows);
@@ -975,6 +975,10 @@ function renderLogRows(rows) {
     const tokenHtml = l.token
       ? `<div style="display:inline-flex;align-items:center;gap:3px;font-family:monospace;font-size:11px;color:#818cf8"><span title="${esc(l.token)}">${esc(l.token)}</span><button class="copy-btn" data-val="${esc(l.token)}" onclick="copyText(this.dataset.val)">复制</button></div>`
       : '—';
+    const host = l.host || '';
+    const hostHtml = host
+      ? `<div class="req-cell-wrap"><span class="req-cell" title="${esc(host)}">${esc(host)}</span><button class="copy-btn" data-val="${esc(host)}" onclick="copyText(this.dataset.val)">复制</button></div>`
+      : '<span style="color:#475569;opacity:.55">—</span>';
     // 备注列：从白名单/黑名单备注映射获取，支持行内编辑
     const commentCell = isWhitelisted
       ? makeCommentCell('/api/whitelist.php', 'ip', l.ip, wlCommentMap[l.ip] || '')
@@ -985,6 +989,7 @@ function renderLogRows(rows) {
     <tr>
       <td style="white-space:nowrap;color:#64748b;font-size:11px">${esc(l.time)}</td>
       <td class="ip-cell"><div style="display:inline-flex;align-items:center;gap:4px;flex-wrap:nowrap"><span>${esc(l.ip)}</span><button class="copy-btn" data-val="${esc(l.ip)}" onclick="copyText(this.dataset.val)">复制</button><span style="display:inline-block;width:2px"></span>${ipBtn}</div></td>
+      <td>${hostHtml}</td>
       ${commentCell}
       <td>${statusBadge(l.status)}</td>
       <td style="min-width:100px;max-width:200px">${tokenHtml}</td>

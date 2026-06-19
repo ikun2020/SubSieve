@@ -20,9 +20,11 @@ if ($method === 'GET') {
         if ($handle) {
             while (($line = fgets($handle)) !== false) {
                 if (!log_line_is_today($line)) continue;
-                if (!preg_match('/^(\S+) \[[^\]]+\] "([^"]*)" (\d+)/', $line, $m)) continue;
-                [, $ip, $request, $status] = $m;
-                if ((int)$status !== 200) continue;
+                $parsed = parse_access_log_line($line);
+                if (!$parsed) continue;
+                $ip = $parsed['ip'];
+                $request = $parsed['request'];
+                if ($parsed['status'] !== 200) continue;
                 $tok = token_from_request($request);
                 if ($tok === '') continue;
                 if (!isset($blacklistedSet[$tok])) continue;
