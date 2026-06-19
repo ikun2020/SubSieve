@@ -231,7 +231,6 @@ tr:hover td{background:rgba(99,102,241,.04)}
     <div class="topbar-right">
       <span class="status-dot"></span>
       <span class="status-text">运行中</span>
-      <span class="status-text auto-timer" id="auto-timer"></span>
       <button class="refresh-btn" onclick="manualRefresh()">手动刷新</button>
       <button class="theme-btn" id="theme-btn" onclick="cycleTheme()" title="切换主题">🌙 深色</button>
     </div>
@@ -583,7 +582,6 @@ let uaBlLimit = 50;      // UA封禁列表显示数量
 let uaWlLimit = 50;      // UA白名单显示数量
 let allUaBlEntries = []; // UA封禁列表完整数据缓存
 let allUaWlEntries = []; // UA白名单完整数据缓存
-let autoTimer, countdown = 300;
 
 // ── 主题 ──────────────────────────────────────────────────────
 const THEMES = ['dark','light','auto'];
@@ -633,33 +631,10 @@ function switchTab(name, el) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
   document.getElementById('tab-title').textContent = TABS[name].title;
-  resetCountdown();
   TABS[name].loader();
 }
 
-// ── 自动刷新倒计时 ─────────────────────────────────────────────
-function resetCountdown() {
-  clearInterval(autoTimer);
-  countdown = 300;
-  updateTimerLabel();
-  autoTimer = setInterval(() => {
-    countdown--;
-    updateTimerLabel();
-    if (countdown <= 0) {
-      resetCountdown();
-      TABS[currentTab].loader();
-    }
-  }, 1000);
-}
-
-function updateTimerLabel() {
-  const m = String(Math.floor(countdown/60)).padStart(2,'0');
-  const s = String(countdown % 60).padStart(2,'0');
-  document.getElementById('auto-timer').textContent = `自动刷新 ${m}:${s}`;
-}
-
 function manualRefresh() {
-  resetCountdown();
   TABS[currentTab].loader();
 }
 
@@ -1926,7 +1901,6 @@ async function importLogs(input) {
 
 // ── 初始化 ────────────────────────────────────────────────────
 loadLogs();
-resetCountdown();
 </script>
 </body>
 </html>
