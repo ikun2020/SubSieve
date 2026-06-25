@@ -2,7 +2,7 @@
 require_once __DIR__ . '/_auth.php';
 
 $STATS_MAX_LINES = 10000;
-$AUTO_TOKEN_BLACKLIST_THRESHOLD = 3;
+$AUTO_TOKEN_BLACKLIST_THRESHOLD = 2;
 
 $ips    = [];   // ip => [total,200,403,429,444]  (recent window, today only)
 $tokens = [];   // token => [count, last_time]     (recent window, today only)
@@ -103,7 +103,7 @@ if ($tokensToAutoBan) {
     foreach ($tokensToAutoBan as $tok) {
         $updatedEntries[] = [
             'token' => $tok,
-            'comment' => hex2bin('e887aae58aa8e68b89e9bb91efbc9a3320e4b8aae9bb91e5908de58d9520495020e8aebfe997ae'),
+            'comment' => hex2bin('e887aae58aa8e68b89e9bb91efbc9a3220e4b8aae9bb91e5908de58d9520495020e8aebfe997ae'),
             'added_at' => date('Y-m-d H:i'),
         ];
     }

@@ -11,7 +11,7 @@ require_once dirname(__DIR__) . '/config.php';
 
 const AUTO_TOKEN_BLACKLIST_INTERVAL_LINES = 10000;
 const AUTO_TOKEN_BLACKLIST_MAX_BYTES = 16777216;
-const AUTO_TOKEN_BLACKLIST_THRESHOLD = 3;
+const AUTO_TOKEN_BLACKLIST_THRESHOLD = 2;
 const AUTO_TOKEN_BLACKLIST_LOCK = '/tmp/subsieve_auto_token_blacklist.lock';
 const AUTO_TOKEN_BLACKLIST_STATE = '/etc/nginx/subscribe/.auto_token_blacklist_state.json';
 
@@ -94,7 +94,7 @@ function auto_token_blacklist_run(): array {
         foreach ($tokensToAutoBan as $tok) {
             $updatedEntries[] = [
                 'token' => $tok,
-                'comment' => hex2bin('e887aae58aa8e68b89e9bb91efbc9a3320e4b8aae9bb91e5908de58d9520495020e8aebfe997ae'),
+                'comment' => hex2bin('e887aae58aa8e68b89e9bb91efbc9a3220e4b8aae9bb91e5908de58d9520495020e8aebfe997ae'),
                 'added_at' => date('Y-m-d H:i'),
             ];
         }
