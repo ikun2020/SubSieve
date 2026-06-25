@@ -107,6 +107,8 @@ body{background:var(--bg);color:var(--text);font:14px/1.5 system-ui,sans-serif;d
 .log-controls{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
 .log-filter{background:var(--bg-input);border:1px solid var(--border2);color:var(--text);padding:7px 12px;border-radius:7px;font-size:12px;outline:none;width:160px}
 .log-filter:focus{border-color:var(--accent)}
+.log-filter[contenteditable="true"]{display:inline-flex;align-items:center;height:34px;white-space:nowrap;overflow:hidden;cursor:text;line-height:18px}
+.log-filter[contenteditable="true"]:empty::before{content:attr(data-placeholder);color:var(--text3);pointer-events:none}
 .log-mode-btns{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
 .mode-btn{background:var(--border);border:1px solid var(--border2);color:var(--text2);padding:5px 14px;border-radius:7px;cursor:pointer;font-size:12px;transition:all .15s}
 .mode-btn:hover{border-color:var(--accent);color:var(--accent)}
@@ -256,7 +258,7 @@ tr:hover td{background:rgba(99,102,241,.04)}
           <input class="log-filter" id="filter-ip" name="subsieve_log_filter_ip" type="search" placeholder="过滤 IP" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" readonly onfocus="this.removeAttribute('readonly')" oninput="logPage=1;renderLogs()">
           <input class="log-filter" id="filter-status" name="subsieve_log_filter_status" type="search" inputmode="numeric" placeholder="状态码 如 403" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" readonly onfocus="this.removeAttribute('readonly')" oninput="logPage=1;renderLogs()">
           <input class="log-filter" id="filter-token" name="subsieve_log_filter_token" type="search" placeholder="过滤 Token（自动去重）" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" readonly onfocus="this.removeAttribute('readonly')" oninput="logPage=1;renderLogs()">
-          <input class="log-filter" id="filter-ua" name="subsieve_log_filter_ua" type="search" placeholder="过滤 UA（不分大小写）" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" readonly onfocus="this.removeAttribute('readonly')" oninput="logPage=1;renderLogs()">
+          <div class="log-filter" id="filter-ua" role="textbox" aria-label="过滤 UA（不分大小写）" tabindex="0" contenteditable="true" data-placeholder="过滤 UA（不分大小写）" spellcheck="false" data-lpignore="true" data-1p-ignore="true" onpaste="pastePlainText(event)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}" oninput="logPage=1;renderLogs()"></div>
           <span class="auto-timer" id="log-count">—</span>
           <div class="radio-group">
             <label><input type="radio" name="sub-filter" value="subscribe" checked onchange="logPage=1;renderLogs()"> 仅订阅相关</label>
@@ -793,11 +795,22 @@ async function loadLogs() {
   renderLogs();
 }
 
+function filterValue(id) {
+  const el = document.getElementById(id);
+  if (!el) return '';
+  return ('value' in el ? el.value : el.textContent).trim();
+}
+
+function pastePlainText(event) {
+  event.preventDefault();
+  const text = (event.clipboardData || window.clipboardData).getData('text/plain');
+  document.execCommand('insertText', false, text);
+}
 function renderLogs() {
-  const fIp     = document.getElementById('filter-ip').value.trim().toLowerCase();
-  const fStatus = document.getElementById('filter-status').value.trim();
-  const fToken  = document.getElementById('filter-token').value.trim().toLowerCase();
-  const fUa     = document.getElementById('filter-ua').value.trim().toLowerCase();
+  const fIp     = filterValue('filter-ip').toLowerCase();
+  const fStatus = filterValue('filter-status');
+  const fToken  = filterValue('filter-token').toLowerCase();
+  const fUa     = filterValue('filter-ua').toLowerCase();
   const subOnly = document.querySelector('input[name="sub-filter"][value="subscribe"]').checked;
 
   let rows = allLogs.filter(l => {
