@@ -253,10 +253,10 @@ tr:hover td{background:rgba(99,102,241,.04)}
         </div>
         <!-- 过滤器 -->
         <div class="log-controls">
-          <input class="log-filter" id="filter-ip" placeholder="过滤 IP" oninput="logPage=1;renderLogs()">
-          <input class="log-filter" id="filter-status" placeholder="状态码 如 403" oninput="logPage=1;renderLogs()">
-          <input class="log-filter" id="filter-token" placeholder="过滤 Token（自动去重）" oninput="logPage=1;renderLogs()">
-          <input class="log-filter" id="filter-ua" placeholder="过滤 UA（不分大小写）" oninput="logPage=1;renderLogs()">
+          <input class="log-filter" id="filter-ip" name="subsieve_log_filter_ip" type="search" placeholder="过滤 IP" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" readonly onfocus="this.removeAttribute('readonly')" oninput="logPage=1;renderLogs()">
+          <input class="log-filter" id="filter-status" name="subsieve_log_filter_status" type="search" inputmode="numeric" placeholder="状态码 如 403" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" readonly onfocus="this.removeAttribute('readonly')" oninput="logPage=1;renderLogs()">
+          <input class="log-filter" id="filter-token" name="subsieve_log_filter_token" type="search" placeholder="过滤 Token（自动去重）" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" readonly onfocus="this.removeAttribute('readonly')" oninput="logPage=1;renderLogs()">
+          <input class="log-filter" id="filter-ua" name="subsieve_log_filter_ua" type="search" placeholder="过滤 UA（不分大小写）" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" readonly onfocus="this.removeAttribute('readonly')" oninput="logPage=1;renderLogs()">
           <span class="auto-timer" id="log-count">—</span>
           <div class="radio-group">
             <label><input type="radio" name="sub-filter" value="subscribe" checked onchange="logPage=1;renderLogs()"> 仅订阅相关</label>
