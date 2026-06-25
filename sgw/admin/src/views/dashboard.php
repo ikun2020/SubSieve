@@ -574,10 +574,7 @@ let cloudCidrs = [];     // 云服务商CIDR列表，用于检测云IP
 let allStatsData = null; // 完整统计数据缓存
 let statsLimits = {ips: 10, tokens: 10, uas: 10, suspTokens: 10, suspIps: 10};
 let statsPages  = {ips:  1, tokens:  1, uas:  1, suspTokens:  1, suspIps:  1};
-let allBlEntries = [];   // blacklist full data cache
-let allBlIdcSummary = []; // cloud/IDC summary cache, not paginated
-let blLimit = 50;
-let blPage = 1;
+let allBlEntries = [];   // 黑名单完整数据缓存
 let allWlEntries = [];   // 白名单完整数据缓存
 let wlCommentMap = {};   // ip → 白名单备注（供日志列显示）
 let blCommentMap = {};   // ip → 黑名单备注（供日志列显示）
@@ -1506,109 +1503,51 @@ async function wlBatchDel() {
 async function loadBlacklist() {
   const data = await apiFetch('/api/blacklist.php');
   if (!data.ok) {
-    document.getElementById('bl-list').innerHTML = '<div class="empty">\u52a0\u8f7d\u5931\u8d25\uff1a' + esc(data.error||'\u672a\u77e5\u9519\u8bef') + '</div>';
-    toast('\u52a0\u8f7d\u5931\u8d25: ' + (data.error||''), 'err'); return;
+    document.getElementById('bl-list').innerHTML = '<div class="empty">加载失败：' + esc(data.error||'未知错误') + '</div>';
+    toast('加载失败: ' + (data.error||''), 'err'); return;
   }
   allBlEntries = data.entries || [];
-  allBlIdcSummary = data.idc_summary || [];
-  blacklistIpSet = new Set(allBlEntries.map(e => e.ip));
-  blCommentMap = {}; allBlEntries.forEach(e => blCommentMap[e.ip] = e.comment || '');
-  blPage = 1;
-  renderBlacklist();
-}
-
-function setBlacklistLimit(n) {
-  blLimit = n;
-  blPage = 1;
-  renderBlacklist();
-}
-
-function changeBlacklistPage(delta) {
-  blPage += delta;
-  renderBlacklist();
-}
-
-function renderBlacklistPager(total) {
-  if (!total) return '';
-  const pageSize = blLimit > 0 ? blLimit : total;
-  const totalPages = blLimit > 0 ? Math.max(1, Math.ceil(total / pageSize)) : 1;
-  blPage = Math.max(1, Math.min(blPage, totalPages));
-  const start = blLimit > 0 ? (blPage - 1) * pageSize + 1 : 1;
-  const end = blLimit > 0 ? Math.min(total, blPage * pageSize) : total;
-  const active = n => blLimit === n ? ' active' : '';
-  const pageButtons = blLimit > 0 ? `
-    <button class="mode-btn" onclick="changeBlacklistPage(-1)" ${blPage<=1?'disabled':''}>\u4e0a\u4e00\u9875</button>
-    <span style="color:var(--text2);font-size:12px;white-space:nowrap;padding:0 6px">\u7b2c ${blPage} / ${totalPages} \u9875\uff08${start}-${end} / ${total} \u6761\uff09</span>
-    <button class="mode-btn" onclick="changeBlacklistPage(1)" ${blPage>=totalPages?'disabled':''}>\u4e0b\u4e00\u9875</button>` :
-    `<span style="color:var(--text2);font-size:12px;white-space:nowrap;padding:0 6px">\u5171 ${total} \u6761</span>`;
-
-  return `
-    <div class="page-controls" style="justify-content:space-between;margin:8px 0 12px">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span style="color:var(--text3);font-size:12px">\u6bcf\u9875</span>
-        <button class="mode-btn${active(25)}" onclick="setBlacklistLimit(25)">25</button>
-        <button class="mode-btn${active(50)}" onclick="setBlacklistLimit(50)">50</button>
-        <button class="mode-btn${active(100)}" onclick="setBlacklistLimit(100)">100</button>
-        <button class="mode-btn${active(0)}" onclick="setBlacklistLimit(0)">\u5168\u90e8</button>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${pageButtons}</div>
-    </div>`;
-}
-
-function renderBlacklistIdcSummary() {
-  const idcSummary = allBlIdcSummary || [];
-  if (!idcSummary.length) return '';
-  const total = idcSummary.reduce((s,r)=>s+r.count,0);
-  return `<div class="idc-section">
-    <div class="card-title">\u7cfb\u7edf\u5185\u7f6IDC\u5c01\u7981\uff08\u81ea\u52a8\u62e6\u622a\uff0c\u5171 ${total} \u6761CIDR\uff09</div>
-    <table><thead><tr><th>\u4e91\u670d\u52a1\u5546 / IDC</th><th>CIDR\u6570\u91cf</th></tr></thead>
-    <tbody>${idcSummary.map(s => `
-      <tr>
-        <td class="ip-cell">${esc(s.name)}</td>
-        <td style="color:#6366f1;font-weight:600">${s.count} \u6761</td>
-      </tr>`).join('')}
-    </tbody></table>
-  </div>`;
-}
-
-function renderBlacklist() {
-  const entries = allBlEntries || [];
-  const total = entries.length;
-  const pageSize = blLimit > 0 ? blLimit : total;
-  const totalPages = blLimit > 0 ? Math.max(1, Math.ceil(total / pageSize)) : 1;
-  blPage = Math.max(1, Math.min(blPage, totalPages));
-  const startIndex = blLimit > 0 ? (blPage - 1) * pageSize : 0;
-  const pageEntries = blLimit > 0 ? entries.slice(startIndex, startIndex + pageSize) : entries;
+  const entries = allBlEntries;
+  const idcSummary = data.idc_summary || [];
 
   let html = '';
   if (entries.length) {
     html += `
     <div class="batch-row">
-      <label><input type="checkbox" id="bl-check-all" onchange="toggleAllBl(this)"> \u672c\u9875\u5168\u9009</label>
-      <button class="btn-danger" onclick="blBatchDel()">\u6279\u91cf\u89e3\u5c01\u9009\u4e2d</button>
-      <span style="color:var(--text3);font-size:12px">\u624b\u52a8\u9ed1\u540d\u5355 ${total} \u6761</span>
+      <label><input type="checkbox" id="bl-check-all" onchange="toggleAllBl(this)"> 全选</label>
+      <button class="btn-danger" onclick="blBatchDel()">批量解封选中</button>
     </div>
-    ${renderBlacklistPager(total)}
-    <table><thead><tr><th style="width:30px"></th><th>IP / CIDR</th><th>\u5907\u6ce8</th><th>\u6dfb\u52a0\u65f6\u95f4</th><th>\u64cd\u4f5c</th></tr></thead>
-    <tbody>${pageEntries.map(e => `
+    <table><thead><tr><th style="width:30px"></th><th>IP / CIDR</th><th>备注</th><th>添加时间</th><th>操作</th></tr></thead>
+    <tbody>${entries.map(e => `
       <tr>
         <td><input type="checkbox" class="bl-check" value="${esc(e.ip)}"></td>
         <td class="ip-cell">${esc(e.ip)}</td>
         ${makeCommentCell('/api/blacklist.php', 'ip', e.ip, e.comment||'')}
         <td style="color:#64748b;font-size:11px">${esc(e.added_at||'')}</td>
-        <td><button class="btn-danger" onclick="blDel(${jsArg(e.ip)})">\u89e3\u5c01</button></td>
+        <td><button class="btn-danger" onclick="blDel(${jsArg(e.ip)})">解封</button></td>
       </tr>`).join('')}
-    </tbody></table>
-    ${renderBlacklistPager(total)}`;
+    </tbody></table>`;
   } else {
-    html += '<div class="empty">\u624b\u52a8\u9ed1\u540d\u5355\u4e3a\u7a7a</div>';
+    html += '<div class="empty">手动黑名单为空</div>';
   }
 
-  html += renderBlacklistIdcSummary();
-  const el = document.getElementById('bl-list');
-  el.innerHTML = html;
-  attachCommentCells(el);
+  if (idcSummary.length) {
+    html += `<div class="idc-section">
+      <div class="card-title">系统内置IDC封禁（自动拦截，共 ${idcSummary.reduce((s,r)=>s+r.count,0)} 条CIDR）</div>
+      <table><thead><tr><th>云服务商 / IDC</th><th>CIDR数量</th></tr></thead>
+      <tbody>${idcSummary.map(s => `
+        <tr>
+          <td class="ip-cell">${esc(s.name)}</td>
+          <td style="color:#6366f1;font-weight:600">${s.count} 条</td>
+        </tr>`).join('')}
+      </tbody></table>
+    </div>`;
+  }
+
+  document.getElementById('bl-list').innerHTML = html;
+  attachCommentCells(document.getElementById('bl-list'));
 }
+
 function toggleAllBl(cb) {
   document.querySelectorAll('.bl-check').forEach(c => c.checked = cb.checked);
 }
