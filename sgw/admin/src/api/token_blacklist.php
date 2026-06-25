@@ -12,30 +12,46 @@ if ($method === 'GET') {
 
     $blacklistedSet = array_flip(array_column($entries, 'token'));
 
-    // Count today's pull attempts for each blacklisted Token. This includes blocked
-    // attempts such as 403, and intentionally does not expose requester IPs here.
+    // Count today's pull attempts for each blacklisted Token and remember the latest
+    // pull time found in the retained access log. Requester IPs are not exposed here.
     $tokenPullCount = []; // token => count
+    $tokenLastPull  = []; // token => ['ts' => unix timestamp, 'time' => display time]
+    $todayKey = app_today_key();
 
     if (file_exists(LOG_FILE)) {
         $handle = fopen(LOG_FILE, 'r');
         if ($handle) {
             while (($line = fgets($handle)) !== false) {
-                if (!log_line_is_today($line)) continue;
                 $parsed = parse_access_log_line($line);
                 if (!$parsed) continue;
                 $request = $parsed['request'];
                 $tok = token_from_request($request);
                 if ($tok === '') continue;
                 if (!isset($blacklistedSet[$tok])) continue;
-                $tokenPullCount[$tok] = ($tokenPullCount[$tok] ?? 0) + 1;
+
+                $dt = log_datetime($line);
+                if (!$dt) continue;
+                $localDt = $dt->setTimezone(app_timezone());
+                if ($localDt->format('Y-m-d') === $todayKey) {
+                    $tokenPullCount[$tok] = ($tokenPullCount[$tok] ?? 0) + 1;
+                }
+
+                $ts = $localDt->getTimestamp();
+                if (!isset($tokenLastPull[$tok]) || $ts > $tokenLastPull[$tok]['ts']) {
+                    $tokenLastPull[$tok] = [
+                        'ts' => $ts,
+                        'time' => $localDt->format('Y-m-d H:i:s'),
+                    ];
+                }
             }
             fclose($handle);
         }
     }
 
-    $result = array_map(function ($e) use ($tokenPullCount) {
+    $result = array_map(function ($e) use ($tokenPullCount, $tokenLastPull) {
         $tok   = $e['token'];
         $e['today_total'] = $tokenPullCount[$tok] ?? 0;
+        $e['last_pull_at'] = $tokenLastPull[$tok]['time'] ?? '';
         return $e;
     }, $entries);
 

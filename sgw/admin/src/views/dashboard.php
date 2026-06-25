@@ -1659,18 +1659,22 @@ async function loadTokenBlacklist() {
     return;
   }
   document.getElementById('tb-list').innerHTML = `
-    <table><thead><tr><th>Token</th><th>今日拉取</th><th>备注</th><th>添加时间</th><th>操作</th></tr></thead>
+    <table><thead><tr><th>Token</th><th>今日拉取</th><th>备注</th><th>最近拉取</th><th>添加时间</th><th>操作</th></tr></thead>
     <tbody>${entries.map(e => {
       const todayTotal = Number(e.today_total || 0);
       const pullsHtml = todayTotal > 0
         ? `<span style="font-size:12px;color:#ef4444">今日拉取 ${todayTotal} 次</span>`
         : '<span style="color:#475569;font-size:11px">今日无拉取</span>';
+      const lastPullHtml = e.last_pull_at
+        ? esc(e.last_pull_at)
+        : '<span style="color:#94a3b8">暂无记录</span>';
       const tok = e.token || '';
       const tokDisplay = tok.length > 16 ? tok.substr(0,8)+'…'+tok.slice(-4) : tok;
       return `<tr>
         <td style="font-family:monospace;font-size:12px" title="${esc(tok)}">${esc(tokDisplay)}<button class="copy-btn" data-val="${esc(tok)}" onclick="copyText(this.dataset.val)" style="margin-left:4px">复制</button></td>
         <td>${pullsHtml}</td>
         ${makeCommentCell('/api/token_blacklist.php', 'token', tok, e.comment||'')}
+        <td style="color:#64748b;font-size:11px;white-space:nowrap">${lastPullHtml}</td>
         <td style="color:#64748b;font-size:11px;white-space:nowrap">${esc(e.added_at||'')}</td>
         <td><button class="btn-danger" style="font-size:12px;padding:2px 8px" onclick="tbDel(${jsArg(tok)})">移除</button></td>
       </tr>`;
