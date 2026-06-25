@@ -326,7 +326,7 @@ tr:hover td{background:rgba(99,102,241,.04)}
         </div>
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-            <div class="card-title" style="margin-bottom:0">可疑 Token（被多IP拉取）</div>
+            <div class="card-title" style="margin-bottom:0">可疑 Token（多IP访问）</div>
             <div style="display:flex;gap:4px">
               <button class="mode-btn active" id="stats-suspTokens-10" onclick="setStatsLimit('suspTokens',10)">10</button>
               <button class="mode-btn" id="stats-suspTokens-25" onclick="setStatsLimit('suspTokens',25)">25</button>
@@ -1170,7 +1170,7 @@ function renderStats() {
       </span>
       <span class="top-count" style="white-space:nowrap">${r.ip_count} 个不同IP</span>
       <button class="add-btn-sm" style="margin-left:8px" onclick="quickBanToken(${jsArg(r.token)})">拉黑</button>
-    </div>`).join('') : '<div class="empty">暂无可疑Token（阈值：3个以上不同IP）</div>';
+    </div>`).join('') : '<div class="empty">暂无可疑Token（阈值：3个以上不同IP访问）</div>';
 
   // 可疑 IP
   const allSuspIps = data.susp_ips || [];

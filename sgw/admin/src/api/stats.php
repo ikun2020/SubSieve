@@ -72,15 +72,18 @@ if (file_exists(LOG_FILE)) {
                 }
             }
 
-            // ── 全量可疑分析（200 状态的订阅请求，排除白名单IP和Token黑名单）──
+            // Suspicious analysis: token list counts 200 and 403 attempts; IP list counts successful pulls only.
             $tok = token_from_request($request);
-            if ($status === 200
-                && !ip_in_cidr_list($ip, $whitelistIps)
+            if (!ip_in_cidr_list($ip, $whitelistIps)
                 && is_subscribe_request($request)
                 && $tok !== ''
+                && !isset($tokenBlacklist[$tok])
             ) {
-                if (!isset($tokenBlacklist[$tok])) {
+                if ($status === 200 || $status === 403) {
                     $suspTokenIps[$tok][$ip] = true;
+                }
+
+                if ($status === 200) {
                     $suspIpTokens[$ip][$tok]  = true;
                 }
             }
