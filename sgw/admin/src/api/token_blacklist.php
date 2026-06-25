@@ -58,6 +58,7 @@ if ($method === 'POST') {
     $comment = trim($body['comment'] ?? '');
 
     if (!$token) json_err('请输入 Token');
+    if (!token_blacklist_value_is_safe($token)) json_err('Token contains invalid characters');
 
     $entries = read_token_blacklist();
     foreach ($entries as $e) {
@@ -66,7 +67,8 @@ if ($method === 'POST') {
 
     $entries[] = ['token' => $token, 'comment' => $comment, 'added_at' => date('Y-m-d H:i')];
     if (!write_token_blacklist($entries)) json_err('写入失败，请检查文件权限');
-    json_out(['ok' => true]);
+    $reload = nginx_reload();
+    json_out(['ok' => true, 'nginx_reloaded' => $reload]);
 }
 
 // PATCH — 更新备注
@@ -76,6 +78,7 @@ if ($method === 'PATCH') {
     $comment = trim($body['comment'] ?? '');
 
     if (!$token) json_err('缺少 token 参数');
+    if (!token_blacklist_value_is_safe($token)) json_err('Token contains invalid characters');
 
     $entries = read_token_blacklist();
     $found   = false;
@@ -95,10 +98,12 @@ if ($method === 'DELETE') {
     $token = trim($body['token'] ?? '');
 
     if (!$token) json_err('缺少 token 参数');
+    if (!token_blacklist_value_is_safe($token)) json_err('Token contains invalid characters');
 
     $entries = array_values(array_filter(read_token_blacklist(), fn($e) => $e['token'] !== $token));
     if (!write_token_blacklist($entries)) json_err('写入失败，请检查文件权限');
-    json_out(['ok' => true]);
+    $reload = nginx_reload();
+    json_out(['ok' => true, 'nginx_reloaded' => $reload]);
 }
 
 json_err('不支持的请求方式', 405);
@@ -106,11 +111,9 @@ json_err('不支持的请求方式', 405);
 // ── 读写 Token 黑名单 ────────────────────────────────────────
 
 function read_token_blacklist(): array {
-    if (!file_exists(TOKEN_BLACKLIST_JSON)) return [];
-    $data = json_decode(file_get_contents(TOKEN_BLACKLIST_JSON), true);
-    return is_array($data) ? $data : [];
+    return read_token_blacklist_entries();
 }
 
 function write_token_blacklist(array $entries): bool {
-    return file_put_contents(TOKEN_BLACKLIST_JSON, json_encode($entries, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), LOCK_EX) !== false;
+    return write_token_blacklist_files($entries);
 }

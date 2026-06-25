@@ -14,6 +14,28 @@ chmod 777 "$SUBSCRIBE_DIR"
 [ -f "$SUBSCRIBE_DIR/ua_custom.conf" ]    || printf 'map $http_user_agent $is_custom_bad_ua {\n    default 0;\n}\n' > "$SUBSCRIBE_DIR/ua_custom.conf"
 [ -f "$SUBSCRIBE_DIR/whitelist_ips.txt" ] || touch "$SUBSCRIBE_DIR/whitelist_ips.txt"
 [ -f "$SUBSCRIBE_DIR/admin_settings.json" ] || echo "{}" > "$SUBSCRIBE_DIR/admin_settings.json"
+[ -f "$SUBSCRIBE_DIR/token_blacklist.json" ] || echo "[]" > "$SUBSCRIBE_DIR/token_blacklist.json"
+if [ ! -f "$SUBSCRIBE_DIR/token_blacklist.conf" ]; then
+    cat > "$SUBSCRIBE_DIR/token_blacklist.conf" <<'TOKENEOF'
+map $arg_token $is_query_token_blacklisted {
+    default 0;
+}
+
+map $uri $path_subscribe_token {
+    default "";
+    ~^/.+/([^/?]+)$ $1;
+}
+
+map $path_subscribe_token $is_path_token_blacklisted {
+    default 0;
+}
+
+map "$is_query_token_blacklisted$is_path_token_blacklisted" $is_token_blacklisted {
+    default 0;
+    ~1 1;
+}
+TOKENEOF
+fi
 
 chmod 666 \
     "$SUBSCRIBE_DIR/blacklist.json" \
@@ -21,7 +43,11 @@ chmod 666 \
     "$SUBSCRIBE_DIR/ua_blacklist.json" \
     "$SUBSCRIBE_DIR/ua_custom.conf" \
     "$SUBSCRIBE_DIR/whitelist_ips.txt" \
-    "$SUBSCRIBE_DIR/admin_settings.json"
+    "$SUBSCRIBE_DIR/admin_settings.json" \
+    "$SUBSCRIBE_DIR/token_blacklist.json" \
+    "$SUBSCRIBE_DIR/token_blacklist.conf"
+
+php -r 'require "/var/www/html/config.php"; write_token_blacklist_files(read_token_blacklist_entries()); @file_put_contents(NGINX_RELOAD_SIGNAL, "1", LOCK_EX);' || true
 
 # 确保日志卷目录和日志文件对 PHP-FPM(www-data) 可写
 mkdir -p /var/log/subscribe

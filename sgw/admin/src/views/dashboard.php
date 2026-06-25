@@ -1053,6 +1053,12 @@ async function loadStats() {
     toast('加载统计失败: ' + (data.error||''), 'err'); return;
   }
   allStatsData = data;
+  if ((data.auto_banned_tokens || []).length) {
+    toast(`已自动拉黑 ${data.auto_banned_tokens.length} 个 Token`);
+  }
+  if (data.auto_ban_error) {
+    toast('自动拉黑 Token 失败: ' + data.auto_ban_error, 'err');
+  }
   renderStats();
 }
 

@@ -16,6 +16,7 @@ define('UA_CUSTOM_CONF',    '/etc/nginx/subscribe/ua_custom.conf');
 define('UA_WHITELIST_JSON', '/etc/nginx/subscribe/ua_whitelist.json');
 define('UA_WHITELIST_CONF',    '/etc/nginx/subscribe/ua_whitelist.conf');
 define('TOKEN_BLACKLIST_JSON', '/etc/nginx/subscribe/token_blacklist.json');
+define('TOKEN_BLACKLIST_CONF', '/etc/nginx/subscribe/token_blacklist.conf');
 define('SETTINGS_JSON',     '/etc/nginx/subscribe/admin_settings.json');
 define('PROTECT_CONF',      '/etc/nginx/subscribe/protect.conf');
 define('DEPLOY_INFO_FILE',  '/var/log/subscribe/DEPLOY_INFO.txt');
@@ -340,6 +341,113 @@ function safe_comment(string $s): string {
 function nginx_ua_pattern(string $ua): string {
     $p = preg_quote($ua, '~');
     return str_replace(['\\', '"'], ['\\\\', '\\"'], $p);
+}
+
+function token_blacklist_value_is_safe(string $token): bool {
+    return $token !== '' && !preg_match('/[\r\n{};]/', $token);
+}
+
+function clean_token_blacklist_entries(array $entries): array {
+    $clean = [];
+    $seen = [];
+
+    foreach ($entries as $entry) {
+        if (!is_array($entry)) continue;
+        $token = trim((string)($entry['token'] ?? ''));
+        if (!token_blacklist_value_is_safe($token) || isset($seen[$token])) continue;
+        $seen[$token] = true;
+        $clean[] = [
+            'token' => $token,
+            'comment' => safe_comment((string)($entry['comment'] ?? '')),
+            'added_at' => safe_comment((string)($entry['added_at'] ?? '')),
+        ];
+    }
+
+    return $clean;
+}
+
+function read_token_blacklist_entries(): array {
+    if (!file_exists(TOKEN_BLACKLIST_JSON)) return [];
+    $data = json_decode((string)file_get_contents(TOKEN_BLACKLIST_JSON), true);
+    return is_array($data) ? clean_token_blacklist_entries($data) : [];
+}
+
+function token_blacklist_map_key(string $token): ?string {
+    if (!token_blacklist_value_is_safe($token)) return null;
+    $pattern = preg_quote($token, '~');
+    return '"~^' . str_replace(['\\', '"'], ['\\\\', '\\"'], $pattern) . '$"';
+}
+
+function token_blacklist_default_conf(): string {
+    return <<<'NGINX'
+map $arg_token $is_query_token_blacklisted {
+    default 0;
+}
+
+map $uri $path_subscribe_token {
+    default "";
+    ~^/.+/([^/?]+)$ $1;
+}
+
+map $path_subscribe_token $is_path_token_blacklisted {
+    default 0;
+}
+
+map "$is_query_token_blacklisted$is_path_token_blacklisted" $is_token_blacklisted {
+    default 0;
+    ~1 1;
+}
+NGINX;
+}
+
+function write_token_blacklist_conf(array $entries): bool {
+    $entries = clean_token_blacklist_entries($entries);
+
+    $queryLines = [
+        'map $arg_token $is_query_token_blacklisted {',
+        '    default 0;',
+    ];
+    $pathLines = [
+        'map $path_subscribe_token $is_path_token_blacklisted {',
+        '    default 0;',
+    ];
+
+    foreach ($entries as $entry) {
+        $key = token_blacklist_map_key($entry['token']);
+        if ($key === null) continue;
+        $queryLines[] = '    ' . $key . ' 1;';
+        $pathLines[] = '    ' . $key . ' 1;';
+    }
+
+    $queryLines[] = '}';
+    $pathLines[] = '}';
+
+    $conf = implode("\n", $queryLines) . "\n\n"
+        . "map \$uri \$path_subscribe_token {\n"
+        . "    default \"\";\n"
+        . "    ~^/.+/([^/?]+)$ \$1;\n"
+        . "}\n\n"
+        . implode("\n", $pathLines) . "\n\n"
+        . "map \"\$is_query_token_blacklisted\$is_path_token_blacklisted\" \$is_token_blacklisted {\n"
+        . "    default 0;\n"
+        . "    ~1 1;\n"
+        . "}\n";
+
+    $ok = file_put_contents(TOKEN_BLACKLIST_CONF, $conf, LOCK_EX) !== false;
+    if ($ok) @chmod(TOKEN_BLACKLIST_CONF, 0666);
+    return $ok;
+}
+
+function write_token_blacklist_files(array $entries): bool {
+    $clean = clean_token_blacklist_entries($entries);
+    $jsonOk = file_put_contents(
+        TOKEN_BLACKLIST_JSON,
+        json_encode($clean, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
+        LOCK_EX
+    ) !== false;
+    if ($jsonOk) @chmod(TOKEN_BLACKLIST_JSON, 0666);
+
+    return $jsonOk && write_token_blacklist_conf($clean);
 }
 
 // ── V2B 数据库接口（预留，后续填充）─────────────────────────

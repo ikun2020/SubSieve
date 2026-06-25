@@ -180,11 +180,13 @@ location ^~ $subscribePath {
     if (\$bad_subscribe_ua = 1)  { set \$block_reason "ua"; }
     if (\$is_custom_bad_ua = 1)  { set \$block_reason "ua"; }
     if (\$is_ua_whitelisted = 1) { set \$block_reason ""; }
+    if (\$is_token_blacklisted = 1) { set \$block_reason "token"; }
 
     if (\$whitelist_ip = 1) { set \$block_reason ""; }
 
     if (\$block_reason = "cloud") { return 403 "Forbidden: Cloud IP"; }
     if (\$block_reason = "ua")    { return 403 "Forbidden: Invalid Client"; }
+    if (\$block_reason = "token") { return 403 "Forbidden: Token"; }
 
     limit_req zone=subscribe_limit burst=5 nodelay;
     limit_req_status 429;

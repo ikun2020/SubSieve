@@ -44,6 +44,31 @@ SKIP_NGINX_RELOAD=1 /scripts/reload_whitelist.sh
 # 确保 admin 容器可写（admin php-fpm 以非 root 用户运行）
 chmod 666 /etc/nginx/subscribe/blacklist.conf /etc/nginx/subscribe/blacklist.json
 
+# Initialize token blacklist maps used by nginx http context.
+if [[ ! -f /etc/nginx/subscribe/token_blacklist.conf ]]; then
+    cat > /etc/nginx/subscribe/token_blacklist.conf <<'TOKENEOF'
+map $arg_token $is_query_token_blacklisted {
+    default 0;
+}
+
+map $uri $path_subscribe_token {
+    default "";
+    ~^/.+/([^/?]+)$ $1;
+}
+
+map $path_subscribe_token $is_path_token_blacklisted {
+    default 0;
+}
+
+map "$is_query_token_blacklisted$is_path_token_blacklisted" $is_token_blacklisted {
+    default 0;
+    ~1 1;
+}
+TOKENEOF
+fi
+[[ ! -f /etc/nginx/subscribe/token_blacklist.json ]] && echo "[]" > /etc/nginx/subscribe/token_blacklist.json
+chmod 666 /etc/nginx/subscribe/token_blacklist.conf /etc/nginx/subscribe/token_blacklist.json
+
 # 初始化自定义UA封禁
 if [[ ! -f /etc/nginx/subscribe/ua_custom.conf ]]; then
     cat > /etc/nginx/subscribe/ua_custom.conf <<'UAEOF'

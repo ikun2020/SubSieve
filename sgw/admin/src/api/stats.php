@@ -8,16 +8,13 @@ $badUas = [];   // ua => count (403 only, today)
 // 全量日志用于可疑分析
 $suspTokenIps = [];  // token => {ip => true}
 $suspIpTokens = [];  // ip    => {token => true}
+$tokenBlacklistedIpAttempts = [];  // token => {blacklisted ip => true}
 
 // 读取Token黑名单（用于从统计中排除）
+$tokenBlacklistEntries = read_token_blacklist_entries();
 $tokenBlacklist = [];
-if (file_exists(TOKEN_BLACKLIST_JSON)) {
-    $tbData = json_decode(file_get_contents(TOKEN_BLACKLIST_JSON), true);
-    if (is_array($tbData)) {
-        foreach ($tbData as $e) {
-            if (!empty($e['token'])) $tokenBlacklist[$e['token']] = true;
-        }
-    }
+foreach ($tokenBlacklistEntries as $e) {
+    $tokenBlacklist[$e['token']] = true;
 }
 
 // 读取白名单（用于排除）
@@ -29,6 +26,17 @@ if (file_exists(WHITELIST_IPS)) {
         $ip = strtok($wl, " \t#");
         $ip = normalize_ip_cidr((string)$ip);
         if ($ip !== null) $whitelistIps[] = $ip;
+    }
+}
+
+$blacklistIps = [];
+if (file_exists(BLACKLIST_JSON)) {
+    $blData = json_decode((string)file_get_contents(BLACKLIST_JSON), true);
+    if (is_array($blData)) {
+        foreach ($blData as $entry) {
+            $ip = normalize_ip_cidr((string)($entry['ip'] ?? ''));
+            if ($ip !== null) $blacklistIps[] = $ip;
+        }
     }
 }
 
@@ -79,8 +87,13 @@ if (file_exists(LOG_FILE)) {
                 && $tok !== ''
                 && !isset($tokenBlacklist[$tok])
             ) {
+                $isBlacklistedIp = ip_in_cidr_list($ip, $blacklistIps);
+
                 if ($status === 200 || $status === 403) {
                     $suspTokenIps[$tok][$ip] = true;
+                    if ($isBlacklistedIp) {
+                        $tokenBlacklistedIpAttempts[$tok][$ip] = true;
+                    }
                 }
 
                 if ($status === 200) {
@@ -89,6 +102,44 @@ if (file_exists(LOG_FILE)) {
             }
         }
         fclose($handle);
+    }
+}
+
+$AUTO_TOKEN_BLACKLIST_THRESHOLD = 3;
+$autoBannedTokens = [];
+$autoBanReloaded = false;
+$autoBanError = '';
+$tokensToAutoBan = [];
+$existingTokenSet = $tokenBlacklist;
+
+foreach ($tokenBlacklistedIpAttempts as $tok => $ipSet) {
+    if (count($ipSet) < $AUTO_TOKEN_BLACKLIST_THRESHOLD) continue;
+    if (isset($existingTokenSet[$tok])) continue;
+    if (!token_blacklist_value_is_safe($tok)) continue;
+
+    $tokensToAutoBan[] = $tok;
+    $existingTokenSet[$tok] = true;
+}
+
+if ($tokensToAutoBan) {
+    $updatedEntries = $tokenBlacklistEntries;
+    foreach ($tokensToAutoBan as $tok) {
+        $updatedEntries[] = [
+            'token' => $tok,
+            'comment' => 'auto: requested by 3 blacklisted IPs',
+            'added_at' => date('Y-m-d H:i'),
+        ];
+    }
+
+    if (write_token_blacklist_files($updatedEntries)) {
+        $autoBannedTokens = $tokensToAutoBan;
+        $autoBanReloaded = nginx_reload();
+        foreach ($autoBannedTokens as $tok) {
+            $tokenBlacklist[$tok] = true;
+            unset($tokens[$tok], $suspTokenIps[$tok]);
+        }
+    } else {
+        $autoBanError = 'write_failed';
     }
 }
 
@@ -145,6 +196,9 @@ json_out([
     'top_ips'     => $topIps,
     'top_tokens'  => $topTokens,
     'bad_uas'     => $badUaList,
-    'susp_tokens' => $suspTokenList,
-    'susp_ips'    => $suspIpList,
+    'susp_tokens'        => $suspTokenList,
+    'susp_ips'           => $suspIpList,
+    'auto_banned_tokens' => $autoBannedTokens,
+    'auto_ban_reloaded'  => $autoBanReloaded,
+    'auto_ban_error'     => $autoBanError,
 ]);
