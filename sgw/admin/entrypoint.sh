@@ -55,5 +55,20 @@ chmod 777 /var/log/subscribe
 touch /var/log/subscribe/access.log
 chmod 666 /var/log/subscribe/access.log
 
+AUTO_TOKEN_BLACKLIST_INTERVAL="${AUTO_TOKEN_BLACKLIST_INTERVAL:-60}"
+case "$AUTO_TOKEN_BLACKLIST_INTERVAL" in
+    ''|*[!0-9]*) AUTO_TOKEN_BLACKLIST_INTERVAL=60 ;;
+esac
+if [ "$AUTO_TOKEN_BLACKLIST_INTERVAL" -lt 10 ]; then
+    AUTO_TOKEN_BLACKLIST_INTERVAL=60
+fi
+
+(
+    while true; do
+        php /var/www/html/tasks/auto_token_blacklist.php >/proc/1/fd/1 2>/proc/1/fd/2 || true
+        sleep "$AUTO_TOKEN_BLACKLIST_INTERVAL"
+    done
+) &
+
 php-fpm -D
 exec nginx -g 'daemon off;'
