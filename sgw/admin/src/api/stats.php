@@ -9,6 +9,8 @@ $badUas = [];   // ua => count (403 only, today)
 $suspTokenIps = [];  // token => {ip => true}
 $suspIpTokens = [];  // ip    => {token => true}
 $tokenBlacklistedIpAttempts = [];  // token => {blacklisted ip => true}
+$tokenBlacklistedIpRuns = [];  // token => current consecutive blacklisted ip set
+$AUTO_TOKEN_BLACKLIST_THRESHOLD = 3;
 
 // 读取Token黑名单（用于从统计中排除）
 $tokenBlacklistEntries = read_token_blacklist_entries();
@@ -92,7 +94,13 @@ if (file_exists(LOG_FILE)) {
                 if ($status === 200 || $status === 403) {
                     $suspTokenIps[$tok][$ip] = true;
                     if ($isBlacklistedIp) {
-                        $tokenBlacklistedIpAttempts[$tok][$ip] = true;
+                        if (!isset($tokenBlacklistedIpRuns[$tok])) $tokenBlacklistedIpRuns[$tok] = [];
+                        $tokenBlacklistedIpRuns[$tok][$ip] = true;
+                        if (count($tokenBlacklistedIpRuns[$tok]) >= $AUTO_TOKEN_BLACKLIST_THRESHOLD) {
+                            $tokenBlacklistedIpAttempts[$tok] = $tokenBlacklistedIpRuns[$tok];
+                        }
+                    } else {
+                        unset($tokenBlacklistedIpRuns[$tok]);
                     }
                 }
 
@@ -105,7 +113,6 @@ if (file_exists(LOG_FILE)) {
     }
 }
 
-$AUTO_TOKEN_BLACKLIST_THRESHOLD = 3;
 $autoBannedTokens = [];
 $autoBanReloaded = false;
 $autoBanError = '';
