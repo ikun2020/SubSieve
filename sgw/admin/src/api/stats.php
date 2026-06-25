@@ -9,7 +9,6 @@ $badUas = [];   // ua => count (403 only, today)
 $suspTokenIps = [];  // token => {ip => true}
 $suspIpTokens = [];  // ip    => {token => true}
 $tokenBlacklistedIpAttempts = [];  // token => {blacklisted ip => true}
-$tokenBlacklistedIpRuns = [];  // token => current consecutive blacklisted ip set
 $AUTO_TOKEN_BLACKLIST_THRESHOLD = 3;
 
 // 读取Token黑名单（用于从统计中排除）
@@ -32,15 +31,36 @@ if (file_exists(WHITELIST_IPS)) {
 }
 
 $blacklistIps = [];
+$blacklistSeen = [];
+$addBlacklistCidr = function (string $value) use (&$blacklistIps, &$blacklistSeen): void {
+    $ip = normalize_ip_cidr($value);
+    if ($ip !== null && !isset($blacklistSeen[$ip])) {
+        $blacklistSeen[$ip] = true;
+        $blacklistIps[] = $ip;
+    }
+};
+
 if (file_exists(BLACKLIST_JSON)) {
     $blData = json_decode((string)file_get_contents(BLACKLIST_JSON), true);
     if (is_array($blData)) {
         foreach ($blData as $entry) {
-            $ip = normalize_ip_cidr((string)($entry['ip'] ?? ''));
-            if ($ip !== null) $blacklistIps[] = $ip;
+            $addBlacklistCidr((string)($entry['ip'] ?? ''));
         }
     }
 }
+
+if (file_exists(CLOUD_GEO_CONF)) {
+    foreach (file(CLOUD_GEO_CONF, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        $line = trim($line);
+        if (preg_match('/^([0-9a-fA-F:.\/]+)\s+1;$/', $line, $m)) {
+            $addBlacklistCidr($m[1]);
+        }
+    }
+}
+unset($blacklistSeen, $addBlacklistCidr);
+
+$whitelistHitCache = [];
+$blacklistHitCache = [];
 
 if (file_exists(LOG_FILE)) {
     $handle = fopen(LOG_FILE, 'r');
@@ -84,23 +104,24 @@ if (file_exists(LOG_FILE)) {
 
             // Suspicious analysis: token list counts 200 and 403 attempts; IP list counts successful pulls only.
             $tok = token_from_request($request);
-            if (!ip_in_cidr_list($ip, $whitelistIps)
+            if (!isset($whitelistHitCache[$ip])) {
+                $whitelistHitCache[$ip] = ip_in_cidr_list($ip, $whitelistIps);
+            }
+
+            if (!$whitelistHitCache[$ip]
                 && is_subscribe_request($request)
                 && $tok !== ''
                 && !isset($tokenBlacklist[$tok])
             ) {
-                $isBlacklistedIp = ip_in_cidr_list($ip, $blacklistIps);
+                if (!isset($blacklistHitCache[$ip])) {
+                    $blacklistHitCache[$ip] = ip_in_cidr_list($ip, $blacklistIps);
+                }
+                $isBlacklistedIp = $blacklistHitCache[$ip];
 
                 if ($status === 200 || $status === 403) {
                     $suspTokenIps[$tok][$ip] = true;
                     if ($isBlacklistedIp) {
-                        if (!isset($tokenBlacklistedIpRuns[$tok])) $tokenBlacklistedIpRuns[$tok] = [];
-                        $tokenBlacklistedIpRuns[$tok][$ip] = true;
-                        if (count($tokenBlacklistedIpRuns[$tok]) >= $AUTO_TOKEN_BLACKLIST_THRESHOLD) {
-                            $tokenBlacklistedIpAttempts[$tok] = $tokenBlacklistedIpRuns[$tok];
-                        }
-                    } else {
-                        unset($tokenBlacklistedIpRuns[$tok]);
+                        $tokenBlacklistedIpAttempts[$tok][$ip] = true;
                     }
                 }
 
@@ -133,7 +154,7 @@ if ($tokensToAutoBan) {
     foreach ($tokensToAutoBan as $tok) {
         $updatedEntries[] = [
             'token' => $tok,
-            'comment' => 'auto: requested by 3 blacklisted IPs',
+            'comment' => hex2bin('e887aae58aa8e68b89e9bb91efbc9a3320e4b8aae9bb91e5908de58d9520495020e8aebfe997ae'),
             'added_at' => date('Y-m-d H:i'),
         ];
     }
