@@ -458,7 +458,7 @@ tr:hover td{background:rgba(99,102,241,.04)}
           <button class="btn-primary" onclick="tbAdd()">添加</button>
         </div>
         <div class="apply-hint" style="margin-bottom:14px;color:#eab308">
-          ⚡ Token 黑名单<strong>不会直接拦截请求</strong>，仅用于监控追踪——黑名单内的 Token 不计入分析统计，此处显示今日各 IP 的拉取记录。如需真正阻断访问，请通过 IP 黑名单或 UA 封禁实现。
+          ⚡ Token 黑名单会直接拦截命中的 Token；下方今日拉取统计包含成功和被拦截的请求，仅显示今日总拉取次数，不展示请求 IP。
         </div>
         <div id="tb-list"><div class="loading">加载中…</div></div>
       </div>
@@ -1661,8 +1661,9 @@ async function loadTokenBlacklist() {
   document.getElementById('tb-list').innerHTML = `
     <table><thead><tr><th>Token</th><th>今日拉取</th><th>备注</th><th>添加时间</th><th>操作</th></tr></thead>
     <tbody>${entries.map(e => {
-      const pullsHtml = e.today_pulls && e.today_pulls.length
-        ? e.today_pulls.map(p => `<span style="font-size:11px;color:#94a3b8">${esc(p.ip)}<span style="color:#ef4444;margin-left:3px">${p.count}次</span></span>`).join('&ensp;')
+      const todayTotal = Number(e.today_total || 0);
+      const pullsHtml = todayTotal > 0
+        ? `<span style="font-size:12px;color:#ef4444">今日拉取 ${todayTotal} 次</span>`
         : '<span style="color:#475569;font-size:11px">今日无拉取</span>';
       const tok = e.token || '';
       const tokDisplay = tok.length > 16 ? tok.substr(0,8)+'…'+tok.slice(-4) : tok;

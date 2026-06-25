@@ -12,8 +12,9 @@ if ($method === 'GET') {
 
     $blacklistedSet = array_flip(array_column($entries, 'token'));
 
-    // 读取今日日志，统计每个黑名单 Token 被哪些 IP 拉取及次数
-    $tokenIpCount = []; // token => [ip => count]
+    // Count today's pull attempts for each blacklisted Token. This includes blocked
+    // attempts such as 403, and intentionally does not expose requester IPs here.
+    $tokenPullCount = []; // token => count
 
     if (file_exists(LOG_FILE)) {
         $handle = fopen(LOG_FILE, 'r');
@@ -22,29 +23,19 @@ if ($method === 'GET') {
                 if (!log_line_is_today($line)) continue;
                 $parsed = parse_access_log_line($line);
                 if (!$parsed) continue;
-                $ip = $parsed['ip'];
                 $request = $parsed['request'];
-                if ($parsed['status'] !== 200) continue;
                 $tok = token_from_request($request);
                 if ($tok === '') continue;
                 if (!isset($blacklistedSet[$tok])) continue;
-                $tokenIpCount[$tok][$ip] = ($tokenIpCount[$tok][$ip] ?? 0) + 1;
+                $tokenPullCount[$tok] = ($tokenPullCount[$tok] ?? 0) + 1;
             }
             fclose($handle);
         }
     }
 
-    $result = array_map(function ($e) use ($tokenIpCount) {
+    $result = array_map(function ($e) use ($tokenPullCount) {
         $tok   = $e['token'];
-        $pulls = [];
-        if (isset($tokenIpCount[$tok])) {
-            arsort($tokenIpCount[$tok]);
-            foreach ($tokenIpCount[$tok] as $ip => $cnt) {
-                $pulls[] = ['ip' => $ip, 'count' => $cnt];
-            }
-        }
-        $e['today_pulls'] = $pulls;
-        $e['today_total'] = array_sum(array_column($pulls, 'count'));
+        $e['today_total'] = $tokenPullCount[$tok] ?? 0;
         return $e;
     }, $entries);
 
