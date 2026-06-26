@@ -577,6 +577,10 @@ let allStatsData = null; // 完整统计数据缓存
 let statsLimits = {ips: 10, tokens: 10, uas: 10, suspTokens: 10, suspIps: 10};
 let statsPages  = {ips:  1, tokens:  1, uas:  1, suspTokens:  1, suspIps:  1};
 let allBlEntries = [];   // 黑名单完整数据缓存
+let blIdcSummary = [];   // 内置 IDC 汇总缓存
+let blPage = 1;          // 手动黑名单当前页
+let blLimit = 100;       // 手动黑名单每页数量，0=全部
+let blSearch = '';       // 手动黑名单搜索词
 let allWlEntries = [];   // 白名单完整数据缓存
 let wlCommentMap = {};   // ip → 白名单备注（供日志列显示）
 let blCommentMap = {};   // ip → 黑名单备注（供日志列显示）
@@ -1520,14 +1524,66 @@ async function loadBlacklist() {
     toast('加载失败: ' + (data.error||''), 'err'); return;
   }
   allBlEntries = data.entries || [];
-  const entries = allBlEntries;
-  const idcSummary = data.idc_summary || [];
+  blIdcSummary = data.idc_summary || [];
+  renderBlacklist();
+}
 
-  let html = '';
-  if (entries.length) {
+function setBlSearch(v) {
+  blSearch = String(v || '');
+  blPage = 1;
+  renderBlacklist(true);
+}
+
+function setBlLimit(n) {
+  blLimit = n;
+  blPage = 1;
+  renderBlacklist();
+}
+
+function changeBlPage(delta) {
+  blPage += delta;
+  renderBlacklist();
+}
+
+function filteredBlacklistEntries() {
+  const q = blSearch.trim().toLowerCase();
+  if (!q) return allBlEntries;
+  return allBlEntries.filter(e => {
+    return String(e.ip || '').toLowerCase().includes(q)
+      || String(e.comment || '').toLowerCase().includes(q)
+      || String(e.added_at || '').toLowerCase().includes(q);
+  });
+}
+
+function renderBlacklist(refocusSearch = false) {
+  const filtered = filteredBlacklistEntries();
+  const pageSize = blLimit;
+  const total = filtered.length;
+  const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(total / pageSize)) : 1;
+  blPage = Math.max(1, Math.min(blPage, totalPages));
+  const entries = pageSize > 0 ? filtered.slice((blPage - 1) * pageSize, blPage * pageSize) : filtered;
+
+  const limitBtn = (n, label) => `<button class="mode-btn ${blLimit === n ? 'active' : ''}" onclick="setBlLimit(${n})">${label}</button>`;
+  let html = `
+    <div class="batch-row" style="align-items:center">
+      <input class="comment-input" id="bl-search" autocomplete="off" data-lpignore="true" data-1p-ignore="true" placeholder="搜索 IP / CIDR / 备注" value="${esc(blSearch)}" oninput="setBlSearch(this.value)" style="max-width:320px;flex:1 1 240px">
+      <span class="auto-timer">手动 ${allBlEntries.length} 条${blSearch ? `，匹配 ${total} 条` : ''}</span>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">
+        ${limitBtn(50, '50')}
+        ${limitBtn(100, '100')}
+        ${limitBtn(200, '200')}
+        ${limitBtn(0, '全部')}
+      </div>
+    </div>`;
+
+  if (!allBlEntries.length) {
+    html += '<div class="empty">手动黑名单为空</div>';
+  } else if (!entries.length) {
+    html += '<div class="empty">没有匹配的手动黑名单</div>';
+  } else {
     html += `
     <div class="batch-row">
-      <label><input type="checkbox" id="bl-check-all" onchange="toggleAllBl(this)"> 全选</label>
+      <label><input type="checkbox" id="bl-check-all" onchange="toggleAllBl(this)"> 全选当前页</label>
       <button class="btn-danger" onclick="blBatchDel()">批量解封选中</button>
     </div>
     <table><thead><tr><th style="width:30px"></th><th>IP / CIDR</th><th>备注</th><th>添加时间</th><th>操作</th></tr></thead>
@@ -1540,15 +1596,21 @@ async function loadBlacklist() {
         <td><button class="btn-danger" onclick="blDel(${jsArg(e.ip)})">解封</button></td>
       </tr>`).join('')}
     </tbody></table>`;
-  } else {
-    html += '<div class="empty">手动黑名单为空</div>';
   }
 
-  if (idcSummary.length) {
+  if (pageSize > 0 && total > pageSize) {
+    html += `<div class="page-controls">
+      <button class="mode-btn" onclick="changeBlPage(-1)" ${blPage<=1?'disabled':''}>上一页</button>
+      <span style="color:var(--text2);font-size:12px;white-space:nowrap;padding:0 6px">第 ${blPage} / ${totalPages} 页（当前 ${entries.length} 条，匹配 ${total} 条）</span>
+      <button class="mode-btn" onclick="changeBlPage(1)" ${blPage>=totalPages?'disabled':''}>下一页</button>
+    </div>`;
+  }
+
+  if (blIdcSummary.length) {
     html += `<div class="idc-section">
-      <div class="card-title">系统内置IDC封禁（自动拦截，共 ${idcSummary.reduce((s,r)=>s+r.count,0)} 条CIDR）</div>
+      <div class="card-title">系统内置IDC封禁（自动拦截，共 ${blIdcSummary.reduce((s,r)=>s+r.count,0)} 条CIDR）</div>
       <table><thead><tr><th>云服务商 / IDC</th><th>CIDR数量</th></tr></thead>
-      <tbody>${idcSummary.map(s => `
+      <tbody>${blIdcSummary.map(s => `
         <tr>
           <td class="ip-cell">${esc(s.name)}</td>
           <td style="color:#6366f1;font-weight:600">${s.count} 条</td>
@@ -1557,10 +1619,18 @@ async function loadBlacklist() {
     </div>`;
   }
 
-  document.getElementById('bl-list').innerHTML = html;
-  attachCommentCells(document.getElementById('bl-list'));
+  const blList = document.getElementById('bl-list');
+  blList.innerHTML = html;
+  attachCommentCells(blList);
+  if (refocusSearch) {
+    const search = document.getElementById('bl-search');
+    if (search) {
+      search.focus();
+      const len = search.value.length;
+      search.setSelectionRange(len, len);
+    }
+  }
 }
-
 function toggleAllBl(cb) {
   document.querySelectorAll('.bl-check').forEach(c => c.checked = cb.checked);
 }
